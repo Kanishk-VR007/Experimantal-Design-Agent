@@ -1,0 +1,95 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│               DRY RUN - QUICK REFERENCE CARD                         │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  BASIC USAGE:                                                        │
+│  ───────────                                                         │
+│  python hypo_agent.py --dry-run --experiment "YOUR TITLE"           │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  QUICK EXAMPLES:                                                     │
+│  ──────────────                                                      │
+│                                                                      │
+│  1. Machine Learning Model Comparison                                │
+│     python hypo_agent.py --dry-run \                                │
+│       --experiment "Compare CNN vs Transformer on ImageNet"         │
+│                                                                      │
+│  2. NLP Task                                                         │
+│     python hypo_agent.py --dry-run \                                │
+│       --experiment "BERT vs GPT for sentiment analysis"             │
+│                                                                      │
+│  3. Optimization Study                                               │
+│     python hypo_agent.py --dry-run \                                │
+│       --experiment "Effect of learning rate on convergence"         │
+│                                                                      │
+│  4. Time Series Prediction                                           │
+│     python hypo_agent.py --dry-run \                                │
+│       --experiment "LSTM vs Attention for stock forecasting"        │
+│                                                                      │
+│  5. Regularization Techniques                                        │
+│     python hypo_agent.py --dry-run \                                │
+│       --experiment "Dropout vs Batch Normalization impact"          │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  WITH OPTIONS:                                                       │
+│  ────────────                                                        │
+│                                                                      │
+│  # Specify max papers per query                                      │
+│  python hypo_agent.py --dry-run \                                   │
+│    --experiment "Your Title" --max-papers 10                        │
+│                                                                      │
+│  # Interactive demo with presets                                     │
+│  python dry_run_demo.py                                             │
+│                                                                      │
+│  # Demo with custom experiment                                       │
+│  python dry_run_demo.py --custom "Your Title"                       │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  WHAT YOU'LL SEE:                                                    │
+│  ───────────────                                                     │
+│                                                                      │
+│  ✓ Generated search queries (3 queries)                             │
+│  ✓ Paper fetching simulation (~24 papers estimate)                  │
+│  ✓ Hypothesis generation method (LLM or rule-based)                 │
+│  ✓ Output file paths (JSON, TXT, cache)                             │
+│  ✓ Sample hypothesis structure                                      │
+│  ✓ Command for actual run                                           │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  BENEFITS:                                                           │
+│  ────────                                                            │
+│                                                                      │
+│  ⚡ Fast execution (~1 second)                                       │
+│  💰 Zero API costs (no external calls)                              │
+│  🔍 Preview before execution                                         │
+│  ✏️  Test different phrasings                                        │
+│  📊 Understand workflow steps                                        │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  SWITCH TO ACTUAL RUN:                                               │
+│  ─────────────────────                                               │
+│                                                                      │
+│  Just remove the --dry-run flag:                                     │
+│                                                                      │
+│  python hypo_agent.py --experiment "Your Title"                     │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+PRO TIPS:
+─────────
+• Always dry run first to preview queries and outputs
+• Check if API key is detected (shown in dry run output)
+• Experiment titles should be clear and specific
+• Use domain-relevant terminology for better query generation
+• Typical experiments compare 2-3 approaches or parameters
+
+TROUBLESHOOTING:
+────────────────
+• "No module named 'arxiv'" → pip install arxiv python-dotenv requests
+• No experiment → Add --experiment "title" or use interactive mode
+• Want to see more papers → Add --max-papers 10

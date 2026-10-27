@@ -1,0 +1,21 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+pydantic>=2.10.0
+
+# Simulation Agent dependencies (Python 3.13 compatible)
+numpy>=1.26.0
+scipy>=1.11.4
+ollama>=0.1.7
+
+# Optional: Chemistry simulations (RDKit)
+# rdkit-pypi==2023.9.4
+
+# Optional: Biology simulations (BioPython)
+# biopython==1.81
+
+# Optional: Claude API for LLM fallback
+# anthropic==0.25.0
+
+python-dotenv

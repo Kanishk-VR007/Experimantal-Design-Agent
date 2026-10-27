@@ -1,0 +1,196 @@
+/* ── SampleTestVisualizer ──────────────────────────────────────────────────── */
+
+.sample-visualizer {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.sample-header {
+  margin-bottom: 14px;
+}
+
+.sample-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #52b788;
+  letter-spacing: 0.02em;
+}
+
+/* ── Main row layout ── */
+.sample-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+/* ── SVG plate wrapper with relative positioning for tooltip ── */
+.plate-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.plate-svg {
+  display: block;
+  background: #0a0f1a;
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+}
+
+.well-group:hover circle {
+  filter: brightness(1.25);
+}
+
+/* ── Hover tooltip ── */
+.well-tooltip {
+  position: absolute;
+  top: 10px;
+  right: -180px;
+  width: 160px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.tooltip-id {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-bottom: 6px;
+  font-family: monospace;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 3px 0;
+}
+
+.tooltip-row span:last-child {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.badge {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.badge-positive  { background: #166534; color: #86efac; }
+.badge-negative  { background: #7f1d1d; color: #fca5a5; }
+.badge-control   { background: #1e3a5f; color: #93c5fd; }
+.badge-blank     { background: #1e293b; color: #64748b; }
+
+/* ── Right panel ── */
+.sample-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 220px;
+  max-width: 260px;
+  flex: 1;
+}
+
+/* ── Stats ── */
+.sample-stats h4,
+.sample-legend h4,
+.sample-protocol h4 {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 8px 0;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.stat-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-card.positive { border-color: #166534; }
+.stat-card.negative { border-color: #7f1d1d; }
+.stat-card.control  { border-color: #1e3a5f; }
+
+.stat-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.stat-lbl {
+  font-size: 0.65rem;
+  color: #64748b;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ── Legend ── */
+.sample-legend {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid #334155;
+}
+
+.legend-label {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+/* ── Protocol notes ── */
+.sample-protocol {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.sample-protocol ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.sample-protocol li {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin: 4px 0;
+  line-height: 1.4;
+}

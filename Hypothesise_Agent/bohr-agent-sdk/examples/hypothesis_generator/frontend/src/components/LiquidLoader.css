@@ -1,0 +1,220 @@
+/* Liquid Loader Container */
+.liquid-loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  min-height: 300px;
+}
+
+.liquid-animation {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 80px;
+  margin-bottom: 2rem;
+}
+
+/* Test Tubes */
+.test-tube {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tube-neck {
+  width: 20px;
+  height: 30px;
+  background: linear-gradient(to bottom, rgba(100, 255, 255, 0.2), rgba(100, 255, 255, 0.3));
+  border: 2px solid rgba(0, 255, 255, 0.6);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 
+    0 0 10px rgba(0, 255, 255, 0.4),
+    inset 0 0 10px rgba(0, 255, 255, 0.1);
+}
+
+.tube-body {
+  position: relative;
+  width: 60px;
+  height: 140px;
+  background: linear-gradient(to bottom, rgba(30, 30, 30, 0.8), rgba(10, 10, 10, 0.9));
+  border: 3px solid rgba(0, 255, 255, 0.6);
+  border-radius: 0 0 15px 15px;
+  overflow: hidden;
+  box-shadow: 
+    0 0 20px rgba(0, 255, 255, 0.3),
+    inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Liquids */
+.liquid {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(to top, 
+    rgba(0, 255, 255, 0.8) 0%, 
+    rgba(0, 200, 255, 0.6) 50%,
+    rgba(100, 200, 255, 0.4) 100%);
+  transition: height 2s ease-in-out;
+  box-shadow: 
+    0 -10px 30px rgba(0, 255, 255, 0.6),
+    inset 0 0 20px rgba(0, 255, 255, 0.3);
+}
+
+.liquid::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: rgba(0, 255, 255, 0.9);
+  border-radius: 50%;
+  filter: blur(3px);
+  animation: wave 2s ease-in-out infinite;
+}
+
+@keyframes wave {
+  0%, 100% { transform: translateX(-50%) scaleX(1); }
+  50% { transform: translateX(50%) scaleX(1.1); }
+}
+
+.left-tube .liquid-left {
+  height: 100px;
+  animation: drainLeft 3s ease-in-out infinite;
+}
+
+.right-tube .liquid-right {
+  height: 20px;
+  animation: fillRight 3s ease-in-out infinite;
+}
+
+@keyframes drainLeft {
+  0% { height: 100px; }
+  50% { height: 20px; }
+  100% { height: 100px; }
+}
+
+@keyframes fillRight {
+  0% { height: 20px; }
+  50% { height: 100px; }
+  100% { height: 20px; }
+}
+
+/* Bubbles */
+.bubbles {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.bubble {
+  position: absolute;
+  bottom: 0;
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: rise 2s ease-in infinite;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+}
+
+.bubble:nth-child(1) {
+  left: 20%;
+  animation-delay: 0s;
+  animation-duration: 2.5s;
+}
+
+.bubble:nth-child(2) {
+  left: 50%;
+  animation-delay: 0.8s;
+  animation-duration: 3s;
+}
+
+.bubble:nth-child(3) {
+  left: 70%;
+  animation-delay: 1.5s;
+  animation-duration: 2.2s;
+}
+
+@keyframes rise {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* Transfer Pipe */
+.transfer-pipe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100px;
+  height: 8px;
+  background: linear-gradient(to right, rgba(0, 200, 255, 0.3), rgba(0, 255, 255, 0.3));
+  border: 2px solid rgba(0, 255, 255, 0.6);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 
+    0 0 15px rgba(0, 255, 255, 0.5),
+    inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.flowing-liquid {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(to right, 
+    transparent, 
+    rgba(0, 255, 255, 0.9), 
+    transparent);
+  animation: flow 2s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+}
+
+@keyframes flow {
+  0% { left: -40%; }
+  50% { left: 100%; }
+  100% { left: -40%; }
+}
+
+/* Loading Message */
+.loading-message {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #00ffff;
+  text-align: center;
+  text-shadow: 
+    0 0 10px rgba(0, 255, 255, 0.8),
+    0 0 20px rgba(0, 255, 255, 0.6),
+    0 0 30px rgba(0, 255, 255, 0.4);
+  animation: glow 2s ease-in-out infinite;
+  letter-spacing: 1px;
+}
+
+@keyframes glow {
+  0%, 100% {
+    text-shadow: 
+      0 0 10px rgba(0, 255, 255, 0.8),
+      0 0 20px rgba(0, 255, 255, 0.6),
+      0 0 30px rgba(0, 255, 255, 0.4);
+  }
+  50% {
+    text-shadow: 
+      0 0 20px rgba(0, 255, 255, 1),
+      0 0 30px rgba(0, 255, 255, 0.8),
+      0 0 40px rgba(0, 255, 255, 0.6);
+  }
+}

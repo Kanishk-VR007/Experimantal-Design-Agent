@@ -1,0 +1,107 @@
+:root {
+  /* Glowing Cyan/Blue Theme */
+  --primary-color: #00d9ff;
+  --primary-hover: #00b8d4;
+  --primary-glow: rgba(0, 217, 255, 0.6);
+  --secondary-color: #a855f7;
+  --secondary-glow: rgba(168, 85, 247, 0.5);
+  --success-color: #00ff88;
+  --warning-color: #ffaa00;
+  --error-color: #ff3366;
+  
+  /* Dark Backgrounds */
+  --bg-color: #000000;
+  --bg-secondary: #050505;
+  --surface-color: #0a0a0a;
+  --surface-hover: #151515;
+  --surface-elevated: #1a1a1a;
+  
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+  
+  /* Borders & Effects */
+  --border-color: rgba(0, 217, 255, 0.2);
+  --border-glow: rgba(0, 217, 255, 0.4);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  --glow-shadow: 0 0 20px var(--primary-glow), 0 0 40px var(--primary-glow);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: radial-gradient(ellipse at top, #0a0a1a 0%, #000000 50%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+/* Glowing Text Effects */
+.glow-text {
+  color: var(--primary-color);
+  text-shadow: 
+    0 0 10px var(--primary-glow),
+    0 0 20px var(--primary-glow),
+    0 0 30px var(--primary-glow);
+}
+
+.glow-text-secondary {
+  color: var(--secondary-color);
+  text-shadow: 
+    0 0 10px var(--secondary-glow),
+    0 0 20px var(--secondary-glow);
+}
+
+h1, h2, h3 {
+  color: var(--primary-color);
+  text-shadow: 0 0 15px var(--primary-glow);
+}
+
+code {
+  font-family: 'Courier New', monospace;
+  background: var(--surface-hover);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+small {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
