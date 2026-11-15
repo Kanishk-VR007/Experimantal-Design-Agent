@@ -21,6 +21,7 @@ export async function fetchHealth() {
       activeModel: data.active_model || (data.models && data.models[0]) || '',
       refinerAvailable: Boolean(data.refiner_available),
       refinerModel: data.refiner_model || '',
+      refinerProvider: data.refiner_provider || 'lmstudio',
       models: data.models || [],
     }
   } catch (error) {

@@ -20,6 +20,7 @@ from typing import Dict, Any, List, Tuple, Optional, Literal
 import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from simulation_agent.llm_client import ensure_lmstudio_model_loaded
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -740,36 +741,32 @@ def _attach_filtering_context(
     return payload
 
 
-def refine_prompt_with_ollama_qwen(
+def refine_prompt_with_qwen(
     topic: str,
     papers: List[Dict[str, Any]],
-    timeout: int = 25,
+    timeout: int = 40,
 ) -> Dict[str, Any]:
     """
     Stage 1 + Stage 2 Pipeline:
       1. Token filtering & stop-word removal across topic + literature.
-      2. Prompt refinement using Ollama `qwen3:4b-thinking` (assistant JSON prefill + `think: False`).
+      2. Prompt refinement using LM Studio `qwen/qwen3-4b-thinking-2507` (with sequential
+         model loading and assistant JSON prefill for fast, deterministic extraction).
+         Falls back gracefully to Ollama or deterministic heuristics if unavailable.
     Returns the refined structured context dict along with token compression stats.
     """
     filtered_ctx = filter_and_compress_context(topic, papers)
-    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-    qwen_model = os.getenv("OLLAMA_REFINER_MODEL") or os.getenv("OLLAMA_MODEL", "qwen3:4b-thinking")
 
-    # Select an available Qwen model if configured tag is missing
-    try:
-        tags_resp = requests.get(f"{ollama_url}/api/tags", timeout=3)
-        if tags_resp.status_code == 200:
-            avail = [m.get("name", "") for m in tags_resp.json().get("models", []) if m.get("name")]
-            if qwen_model not in avail:
-                qwen_candidates = [m for m in avail if "qwen" in m.lower()]
-                if qwen_candidates:
-                    qwen_model = qwen_candidates[0]
-                elif avail:
-                    qwen_model = avail[0]
-    except Exception:
-        fallback = _heuristic_refinement(topic, filtered_ctx)
-        logger.warning("Ollama runtime unreachable at %s; using deterministic refinement", ollama_url)
-        return _attach_filtering_context(fallback, filtered_ctx, "ollama_unavailable")
+    # LM Studio configuration
+    lmstudio_url = os.getenv("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/")
+    qwen_model = (
+        os.getenv("LMSTUDIO_REFINER_MODEL")
+        or os.getenv("OLLAMA_REFINER_MODEL")
+        or "qwen/qwen3-4b-thinking-2507"
+    )
+
+    # Ollama fallback configuration
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+    ollama_model = os.getenv("OLLAMA_MODEL", "qwen3:4b-thinking")
 
     system_msg = (
         "You are a Scientific Prompt Refinement Agent. Given stop-word-filtered scientific tokens "
@@ -786,8 +783,12 @@ def refine_prompt_with_ollama_qwen(
         "\nExamples of correct output:\n\n"
         'Physics example input: "pendulum oscillation period vs length"\n'
         '{"domain":"physics","experiment_type":"simple_pendulum","refined_objective":"Measure oscillation period T as a function of pendulum length L to verify T=2π√(L/g)","parameters":{"length_m":1.0,"gravity_m_s2":9.81,"mass_kg":0.5},"independent_vars":["length_m"],"dependent_vars":["period_s"],"control_vars":["mass_kg","air_resistance"],"equations":["T = 2*pi*sqrt(L/g)"],"refined_prompt":"Design a pendulum experiment varying length 0.2-2.0m, measuring period with photogate, 10 trials per length, compute g from T²∝L regression."}\n\n'
-        'Chemistry example input: "rate of reaction between acid and carbonate"\n'
-        '{"domain":"chemistry","experiment_type":"reaction_kinetics","refined_objective":"Determine reaction rate k for HCl + CaCO3 → CaCl2 + H2O + CO2 by measuring CO2 volume over time","parameters":{"concentration_M":1.0,"temperature_K":298,"mass_ite_g":5.0},"independent_vars":["concentration_M"],"dependent_vars":["reaction_rate_mol_per_s"],"control_vars":["temperature_K","particle_size"],"equations":["rate = k[HCl]^n","k = A*exp(-Ea/(R*T))"],"refined_prompt":"Design kinetics experiment: vary HCl concentration 0.5-2.0M, measure CO2 volume via gas syringe at 30s intervals, fit to rate law, determine order n and rate constant k."}\n\n'
+        'Mechanical example input: "bike gear system transmission efficiency"\n'
+        '{"domain":"mechanical_engineering","experiment_type":"gear_ratio_efficiency","refined_objective":"Evaluate torque transmission efficiency across bicycle gear ratios 1.5 to 3.8 under variable cadence","parameters":{"front_chainring_teeth":42,"rear_sprocket_teeth":14,"cadence_rpm":80,"input_torque_nm":50.0},"independent_vars":["gear_ratio","cadence_rpm"],"dependent_vars":["output_torque_nm","transmission_efficiency_pct"],"control_vars":["chain_tension_n","lubrication_type"],"equations":["ratio = teeth_front / teeth_rear","efficiency = (torque_out / (torque_in * ratio)) * 100"],"refined_prompt":"Design a bicycle drivetrain test: vary gear ratios from 1.5 to 3.8 at 60-100 RPM cadence with 50 Nm input torque, measuring output torque and power losses to calculate transmission efficiency."}\n\n'
+        'Civil engineering example input: "cantilever beam deflection under point load"\n'
+        '{"domain":"civil_engineering","experiment_type":"beam_deflection","refined_objective":"Measure mid-span deflection of steel I-beam under varying static loads to verify Euler-Bernoulli beam theory","parameters":{"beam_length_m":3.0,"elastic_modulus_gpa":200.0,"point_load_kn":15.0},"independent_vars":["point_load_kn"],"dependent_vars":["deflection_mm"],"control_vars":["beam_cross_section","boundary_conditions"],"equations":["delta = (P * L^3) / (3 * E * I)"],"refined_prompt":"Design a structural beam bending test: apply incremental static loads 5-50 kN on a 3m steel cantilever beam, measure deflection via dial gauge and LVDT, calculate flexural rigidity."}\n\n'
+        'Electronics example input: "rc low pass filter cutoff frequency"\n'
+        '{"domain":"electronics","experiment_type":"rc_filter_frequency_response","refined_objective":"Determine -3dB cutoff frequency and attenuation roll-off for a first-order RC passive filter","parameters":{"resistance_ohms":1000.0,"capacitance_uf":0.1,"input_voltage_v":5.0},"independent_vars":["frequency_hz"],"dependent_vars":["output_voltage_v","gain_db"],"control_vars":["input_voltage_v","temperature_c"],"equations":["fc = 1 / (2 * pi * R * C)","gain_db = 20 * log10(Vout / Vin)"],"refined_prompt":"Design RC filter test: sweep sine wave input from 100 Hz to 100 kHz, record output amplitude on oscilloscope, locate -3dB cutoff frequency and compare to theoretical fc."}\n\n'
         'CS example input: "binary search vs linear search performance"\n'
         '{"domain":"computer_science","experiment_type":"algorithm_complexity","refined_objective":"Compare time complexity of binary search O(log n) vs linear search O(n) across input sizes","parameters":{"min_array_size":100,"max_array_size":100000,"num_trials":50},"independent_vars":["array_size"],"dependent_vars":["search_time_ms"],"control_vars":["hardware","data_distribution"],"equations":["T_linear = O(n)","T_binary = O(log n)"],"refined_prompt":"Benchmark binary vs linear search: sorted arrays from 100 to 100000 elements, 50 random-target trials per size, measure wall-clock time, plot scaling curves, verify asymptotic complexity ratios."}\n'
         "\nEmit ONLY the single JSON object for the actual input below; never restate these examples."
@@ -803,11 +804,84 @@ def refine_prompt_with_ollama_qwen(
     )
 
     parse_path = "not_attempted"
+
+    # ── Attempt 1: LM Studio (Sequential load + Assistant Prefill stream) ──
+    try:
+        # Sequentially ensure Qwen 3 4B is active in LM Studio
+        ensure_lmstudio_model_loaded(qwen_model)
+
+        resp = requests.post(
+            f"{lmstudio_url}/chat/completions",
+            json={
+                "model": qwen_model,
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": '{"domain": "'},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1024,
+                "stream": True,
+                "stop": ["\n\n", "}\n\n"],
+            },
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            content_parts: List[str] = []
+            reasoning_parts: List[str] = []
+            for raw_line in resp.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    choices = chunk.get("choices") or []
+                    if choices:
+                        delta = choices[0].get("delta") or {}
+                        rc = delta.get("reasoning_content")
+                        if rc:
+                            reasoning_parts.append(rc)
+                        c = delta.get("content")
+                        if c:
+                            content_parts.append(c)
+                except Exception:
+                    continue
+
+            raw_tail = "".join(content_parts).strip()
+            if not raw_tail and reasoning_parts:
+                raw_tail = _strip_model_artifacts("".join(reasoning_parts))
+
+            parsed, parse_path = _parse_refinement_json(raw_tail)
+            if parsed:
+                base = _heuristic_refinement(topic, filtered_ctx)
+                refinement, defaulted_fields = _validate_refinement_payload(parsed, base)
+                refinement["refiner_source"] = f"lmstudio:{qwen_model}"
+                logger.info(
+                    "Qwen refinement accepted via LM Studio parse path '%s' (model=%s, domain=%s, defaulted_fields=%s)",
+                    parse_path,
+                    qwen_model,
+                    refinement.get("domain"),
+                    ", ".join(defaulted_fields) or "none",
+                )
+                return _attach_filtering_context(refinement, filtered_ctx, parse_path)
+            else:
+                logger.warning("LM Studio Qwen refinement JSON unusable (path=%s); trying fallback", parse_path)
+        else:
+            logger.warning("LM Studio returned HTTP %s for refinement", resp.status_code)
+    except Exception as exc:
+        logger.warning("LM Studio Qwen refinement call failed (%s); trying fallback", exc)
+
+    # ── Attempt 2: Optional Ollama fallback (if running) ──
     try:
         resp = requests.post(
             f"{ollama_url}/api/chat",
             json={
-                "model": qwen_model,
+                "model": ollama_model,
                 "messages": [
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg},
@@ -821,43 +895,28 @@ def refine_prompt_with_ollama_qwen(
                     "stop": ["\n\n"],
                 },
             },
-            timeout=timeout,
+            timeout=8,
         )
         if resp.status_code == 200:
             message = resp.json().get("message") or {}
             raw_tail = message.get("content") or message.get("thinking") or ""
-
             parsed, parse_path = _parse_refinement_json(raw_tail)
             if parsed:
-                # Pydantic validation keeps partial/hallucinated responses usable:
-                # invalid domains map to "general", bad fields fall back to the
-                # deterministic baseline, and numeric parameters stay numeric.
                 base = _heuristic_refinement(topic, filtered_ctx)
                 refinement, defaulted_fields = _validate_refinement_payload(parsed, base)
-                refinement["refiner_source"] = f"ollama:{qwen_model}"
-                logger.info(
-                    "Qwen refinement accepted via parse path '%s' (model=%s, domain=%s, defaulted_fields=%s)",
-                    parse_path,
-                    qwen_model,
-                    refinement.get("domain"),
-                    ", ".join(defaulted_fields) or "none",
-                )
+                refinement["refiner_source"] = f"ollama:{ollama_model}"
                 return _attach_filtering_context(refinement, filtered_ctx, parse_path)
+    except Exception:
+        pass
 
-            logger.warning(
-                "Qwen refinement JSON unusable (path=%s, head=%r); using deterministic refinement",
-                parse_path,
-                (raw_tail or "")[:120],
-            )
-        else:
-            parse_path = f"http_{resp.status_code}"
-            logger.warning("Ollama refinement returned HTTP %s; using deterministic refinement", resp.status_code)
-    except Exception as e:
-        parse_path = "ollama_error"
-        logger.warning("Ollama Qwen prompt refinement failed (%s); using deterministic refinement", e)
-
+    # ── Attempt 3: Deterministic Scientific Heuristic Refinement ──
     fallback = _heuristic_refinement(topic, filtered_ctx)
-    return _attach_filtering_context(fallback, filtered_ctx, parse_path)
+    fallback["refiner_source"] = "heuristic_fallback"
+    return _attach_filtering_context(fallback, filtered_ctx, parse_path if parse_path != "not_attempted" else "heuristic")
+
+
+# Backward compatibility alias
+refine_prompt_with_ollama_qwen = refine_prompt_with_qwen
 
 
 def build_deepseek_messages(topic: str, refinement: Dict[str, Any]) -> List[Dict[str, str]]:

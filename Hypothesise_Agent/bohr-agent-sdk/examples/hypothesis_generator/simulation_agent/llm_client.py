@@ -11,6 +11,8 @@ import re
 import json
 import time
 import logging
+import shutil
+import subprocess
 from typing import Dict, Any, Generator, List, Optional, Tuple
 import requests
 from dotenv import load_dotenv
@@ -20,6 +22,8 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 logger = logging.getLogger(__name__)
 
+LMS_CLI = os.path.expanduser(r"~\.lmstudio\bin\lms.exe")
+
 
 def get_llm_config() -> Dict[str, str]:
     """Read current LLM configuration dynamically from environment."""
@@ -27,9 +31,51 @@ def get_llm_config() -> Dict[str, str]:
         "provider": os.getenv("LLM_PROVIDER", "lmstudio").lower().strip(),
         "lmstudio_url": os.getenv("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/"),
         "lmstudio_model": os.getenv("LMSTUDIO_MODEL", "oreal-deepseek-r1-distill-qwen-7b").strip(),
+        "lmstudio_refiner_model": os.getenv("LMSTUDIO_REFINER_MODEL", "qwen/qwen3-4b-thinking-2507").strip(),
         "ollama_url": os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/"),
         "ollama_model": os.getenv("OLLAMA_MODEL", "qwen3:4b-thinking").strip(),
     }
+
+
+def ensure_lmstudio_model_loaded(model_name: str) -> bool:
+    """
+    Ensure the requested model is active in LM Studio via the CLI.
+    Enables clean sequential multi-model loading (Refiner -> Generator).
+    """
+    if not model_name:
+        return False
+    cli_path = LMS_CLI if os.path.exists(LMS_CLI) else (shutil.which("lms") or "")
+    if not cli_path or not os.path.exists(cli_path):
+        return True
+
+    try:
+        res = subprocess.run([cli_path, "ps"], capture_output=True, text=True, timeout=6)
+        if res.returncode == 0:
+            for line in res.stdout.strip().split("\n")[1:]:
+                parts = line.split()
+                if parts and (model_name in parts[0] or parts[0] in model_name):
+                    logger.info("[sequential_loader] Model %s is already active in LM Studio", model_name)
+                    return True
+    except Exception as e:
+        logger.warning("[sequential_loader] Error querying `lms ps`: %s", e)
+
+    logger.info("[sequential_loader] Sequentially loading %s into LM Studio...", model_name)
+    try:
+        t0 = time.time()
+        load_res = subprocess.run(
+            [cli_path, "load", model_name, "-y"],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        logger.info(
+            "[sequential_loader] `lms load %s` exited with code %s in %.2fs",
+            model_name, load_res.returncode, time.time() - t0,
+        )
+        return load_res.returncode == 0
+    except Exception as e:
+        logger.warning("[sequential_loader] Failed to load %s via lms CLI: %s", model_name, e)
+        return False
 
 
 def strip_thinking_tags(text: str) -> str:
@@ -145,6 +191,31 @@ def check_lmstudio_status() -> Dict[str, Any]:
         "active_model": preferred,
         "models": [],
     }
+
+
+def check_refiner_status() -> Dict[str, Any]:
+    """Check whether Qwen prompt refiner is available (in LM Studio or Ollama)."""
+    cfg = get_llm_config()
+    refiner_model = cfg.get("lmstudio_refiner_model") or "qwen/qwen3-4b-thinking-2507"
+    url = cfg["lmstudio_url"]
+    try:
+        resp = requests.get(f"{url}/models", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json().get("data", [])
+            models = [m.get("id", "") for m in data if m.get("id")]
+            has_refiner = any(refiner_model in m or m in refiner_model for m in models)
+            return {
+                "available": has_refiner or len(models) > 0,
+                "server_reachable": True,
+                "provider": "lmstudio",
+                "active_model": refiner_model,
+                "models": models,
+            }
+    except Exception:
+        pass
+
+    # Fallback to Ollama if LM Studio is offline
+    return check_ollama_status()
 
 
 def check_ollama_status() -> Dict[str, Any]:
@@ -429,6 +500,12 @@ def stream_chat_completion(
 
     # ── Connection phase: retryable, nothing has been streamed yet ───────
     provider, model = primary_provider, primary_model
+    if provider == "lmstudio":
+        try:
+            ensure_lmstudio_model_loaded(model)
+        except Exception as exc:
+            logger.warning("[llm_client] ensure_lmstudio_model_loaded warning: %s", exc)
+
     try:
         resp = _connect_with_retry(
             provider, model, messages, temperature, max_tokens, timeout, stop, cfg

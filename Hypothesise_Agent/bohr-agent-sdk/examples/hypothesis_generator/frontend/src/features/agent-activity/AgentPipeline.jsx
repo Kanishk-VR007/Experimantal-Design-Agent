@@ -10,8 +10,8 @@ const BASE_LAYERS = [
   {
     id: 'L1',
     name: 'Prompt Refinement & Grounding',
-    role: 'Ollama Qwen2.5-Coder / arXiv Semantic Grounding',
-    engine: 'Ollama + Science Navigator',
+    role: 'LM Studio Qwen 3 Thinking / arXiv Semantic Grounding',
+    engine: 'LM Studio + Science Navigator',
     status: 'completed',
     duration: '1.2s',
     details: 'Token reduction (-37.5%), scientific stop-word removal, paper citation integration.'

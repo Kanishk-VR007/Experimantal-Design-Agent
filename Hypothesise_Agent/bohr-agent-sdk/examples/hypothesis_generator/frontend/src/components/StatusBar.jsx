@@ -35,7 +35,7 @@ function StatusBar({ status, onRefresh }) {
   const providerLabel = status.provider === 'lmstudio' ? 'LM Studio' : 'Ollama'
   const modelText = status.activeModel || (status.models || []).join(', ')
   const refinerText = status.refinerAvailable && status.refinerModel
-    ? ` | Prompt Refiner: Ollama (${status.refinerModel})`
+    ? ` | Refiner: LM Studio (${status.refinerModel})`
     : ''
 
   return (

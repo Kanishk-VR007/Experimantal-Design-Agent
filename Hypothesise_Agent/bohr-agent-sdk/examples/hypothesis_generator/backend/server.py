@@ -28,7 +28,7 @@ from simulation_agent.agent import run_simulation, extract_procedure_from_text
 from simulation_agent.router import route
 from simulation_agent.output_formatter import format_output
 from simulation_agent.visualization.scene_generator import generate_scene_specification
-from simulation_agent.llm_client import check_llm_health, check_ollama_status, stream_chat_completion, get_llm_config
+from simulation_agent.llm_client import check_llm_health, check_ollama_status, check_refiner_status, stream_chat_completion, get_llm_config, ensure_lmstudio_model_loaded
 from simulation_agent.prompt_refiner import refine_prompt_with_ollama_qwen, build_deepseek_messages
 
 # Load environment
@@ -94,6 +94,7 @@ class HealthResponse(BaseModel):
     active_model: Optional[str] = None
     refiner_available: bool = False
     refiner_model: Optional[str] = None
+    refiner_provider: str = "lmstudio"
     models: List[str]
 
 
@@ -300,9 +301,9 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Check API, LM Studio generator, and Ollama Qwen refiner health"""
+    """Check API, LM Studio generator, and LM Studio Qwen refiner health"""
     llm_status = check_llm_health()
-    refiner_status = check_ollama_status()
+    refiner_status = check_refiner_status()
 
     return {
         "status": "healthy" if llm_status["available"] else "llm_unavailable",
@@ -312,6 +313,7 @@ async def health_check():
         "active_model": llm_status.get("active_model"),
         "refiner_available": refiner_status.get("available", False),
         "refiner_model": refiner_status.get("active_model"),
+        "refiner_provider": refiner_status.get("provider", "lmstudio"),
         "models": llm_status["models"],
     }
 
@@ -362,8 +364,8 @@ async def generate_design_stream(request: ExperimentRequest):
 
             yield f"data: {json.dumps({'type': 'papers', 'papers': papers, 'count': len(papers)})}\n\n"
 
-            # 3. Stage 1 & 2: Token filtering, stop-word removal & Ollama Qwen prompt refinement
-            yield f"data: {json.dumps({'type': 'status', 'stage': 'refining', 'message': 'Filtering stop words & refining experimental prompt via Ollama (qwen)...'})}\n\n"
+            # 3. Stage 1 & 2: Token filtering, stop-word removal & LM Studio Qwen prompt refinement
+            yield f"data: {json.dumps({'type': 'status', 'stage': 'refining', 'message': 'Filtering stop words & refining experimental prompt via LM Studio (Qwen 3)...'})}\n\n"
             refinement = await asyncio.to_thread(refine_prompt_with_ollama_qwen, request.topic, papers)
             if request.domain:
                 refinement["domain"] = request.domain
@@ -373,12 +375,15 @@ async def generate_design_stream(request: ExperimentRequest):
             raw_toks = tf_stats.get("raw_token_count", 0)
             filt_toks = tf_stats.get("filtered_token_count", 0)
             red_pct = tf_stats.get("reduction_pct", 0.0)
-            ref_src = refinement.get("refiner_source", "qwen")
+            ref_src = refinement.get("refiner_source", "lmstudio:qwen")
 
-            yield f"data: {json.dumps({'type': 'status', 'stage': 'reasoning', 'message': f'Tokens filtered {raw_toks}→{filt_toks} (-{red_pct}% stop words) via {ref_src} · OREAL DeepSeek-R1 designing experiment...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'stage': 'reasoning', 'message': f'Tokens filtered {raw_toks}→{filt_toks} (-{red_pct}% stop words) via {ref_src} · Sequentially switching to OREAL DeepSeek-R1...'})}\n\n"
 
             # 4. Construct high-precision structured context for OREAL DeepSeek-R1-Distill-Qwen-7B
             messages = build_deepseek_messages(request.topic, refinement)
+
+            # Ensure OREAL DeepSeek-R1 is loaded in LM Studio before worker starts
+            await asyncio.to_thread(ensure_lmstudio_model_loaded, LMSTUDIO_MODEL)
 
             # 5. Run synchronous streaming HTTP call in worker thread and push events to asyncio.Queue
             loop = asyncio.get_running_loop()

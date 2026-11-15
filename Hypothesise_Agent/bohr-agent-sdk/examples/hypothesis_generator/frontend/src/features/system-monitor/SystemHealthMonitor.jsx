@@ -26,10 +26,10 @@ function SystemHealthMonitor({ status, onRefresh }) {
       icon: Cpu,
     },
     {
-      name: 'Prompt Refiner (Ollama)',
-      port: '11434',
+      name: 'Prompt Refiner (LM Studio)',
+      port: '1234 (Sequential)',
       online: status?.refinerAvailable || status?.ollamaAvailable,
-      details: status?.refinerModel || 'qwen3:4b-thinking',
+      details: status?.refinerModel || 'qwen/qwen3-4b-thinking-2507',
       icon: Cpu,
     },
     {

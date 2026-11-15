@@ -1,4 +1,4 @@
-# Launch Experimental Design Agent UI
+﻿# Launch Experimental Design Agent UI
 # This PowerShell script starts both backend and frontend servers
 
 Write-Host ""
@@ -31,23 +31,17 @@ try {
     exit 1
 }
 
-# Check Ollama
-Write-Host "Checking Ollama..." -NoNewline
+# Check LM Studio
+Write-Host "Checking LM Studio..." -NoNewline
 try {
-    $ollamaCheck = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    Write-Host " ✅ Ollama is running"
+    $lmsCheck = Invoke-WebRequest -Uri "http://localhost:1234/v1/models" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    Write-Host " ✅ LM Studio is running (port 1234)"
 } catch {
-    Write-Host " ⚠️  Ollama not running"
+    Write-Host " ⚠️  LM Studio server not running"
     Write-Host ""
-    Write-Host "Start Ollama with:"
-    Write-Host "  ollama serve"
+    Write-Host "Start LM Studio server with:"
+    Write-Host "  lms server start"
     Write-Host ""
-    Write-Host "The app will start but won't generate designs without Ollama."
-    Write-Host ""
-    $continue = Read-Host "Continue anyway? (y/n)"
-    if ($continue -ne "y") {
-        exit 1
-    }
 }
 
 Write-Host ""
