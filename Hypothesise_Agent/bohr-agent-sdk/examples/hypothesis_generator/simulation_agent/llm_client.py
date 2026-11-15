@@ -39,11 +39,18 @@ def get_llm_config() -> Dict[str, str]:
 
 def ensure_lmstudio_model_loaded(model_name: str) -> bool:
     """
-    Ensure the requested model is active in LM Studio via the CLI.
-    Enables clean sequential multi-model loading (Refiner -> Generator).
+    Ensure the requested model is active in LM Studio via native REST API & LocalModelManager.
+    Enforces the single active model policy: completely unloads prior models before loading.
     """
     if not model_name:
         return False
+    try:
+        from backend.services.local_model_manager import LocalModelManager
+        return LocalModelManager.get_instance().load_model_sync(model_name)
+    except Exception as e:
+        logger.warning("[sequential_loader] LocalModelManager error: %s", e)
+
+    # Fallback to CLI only if LocalModelManager is unavailable
     cli_path = LMS_CLI if os.path.exists(LMS_CLI) else (shutil.which("lms") or "")
     if not cli_path or not os.path.exists(cli_path):
         return True
@@ -59,7 +66,7 @@ def ensure_lmstudio_model_loaded(model_name: str) -> bool:
     except Exception as e:
         logger.warning("[sequential_loader] Error querying `lms ps`: %s", e)
 
-    logger.info("[sequential_loader] Sequentially loading %s into LM Studio...", model_name)
+    logger.info("[sequential_loader] Sequentially loading %s into LM Studio via CLI fallback...", model_name)
     try:
         t0 = time.time()
         load_res = subprocess.run(
@@ -67,10 +74,6 @@ def ensure_lmstudio_model_loaded(model_name: str) -> bool:
             capture_output=True,
             text=True,
             timeout=45,
-        )
-        logger.info(
-            "[sequential_loader] `lms load %s` exited with code %s in %.2fs",
-            model_name, load_res.returncode, time.time() - t0,
         )
         return load_res.returncode == 0
     except Exception as e:

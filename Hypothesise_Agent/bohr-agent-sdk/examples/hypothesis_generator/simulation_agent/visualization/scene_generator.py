@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 from .scene_schema import SceneSpecification
 from .templates.physics_templates import build_pendulum_scene, build_projectile_scene
 from .templates.chemistry_templates import build_molecule_scene
-from .templates.mech_civil_templates import build_beam_deformation_scene, build_gear_train_scene
+from .templates.mech_civil_templates import build_beam_deformation_scene, build_gear_train_scene, build_four_bar_linkage_scene
 from .templates.electronics_templates import build_circuit_scene
 from .templates.cs_templates import build_cs_scene
 from .templates.generic_templates import build_generic_scene
@@ -54,7 +54,9 @@ def generate_scene_specification(procedure: Dict[str, Any], numerical_results: D
 
     # 3. Mechanical Engineering domain routing
     elif domain in ["mechanical_engineering", "mechanical", "mech"]:
-        if any(w in combined_text for w in ["gear", "pinion", "teeth"]):
+        if any(w in combined_text for w in ["linkage", "four bar", "four_bar", "crank", "rocker", "coupler"]):
+            spec = build_four_bar_linkage_scene(procedure, numerical_results, plot_data)
+        elif any(w in combined_text for w in ["gear", "pinion", "teeth"]):
             spec = build_gear_train_scene(procedure, numerical_results, plot_data)
         else:
             spec = build_beam_deformation_scene(procedure, numerical_results, plot_data)

@@ -406,3 +406,189 @@ def build_gear_train_scene(procedure: Dict[str, Any], numerical_results: Dict[st
         controls=SceneControlsConfig(allow_orbit=True, allow_pan=True, allow_zoom=True, show_grid=True)
     )
 
+
+def build_four_bar_linkage_scene(procedure: Dict[str, Any], numerical_results: Dict[str, Any], plot_data: List[Dict[str, Any]]) -> SceneSpecification:
+    """
+    Builds an analytical, kinematically consistent 3D Four-Bar Linkage simulation scene.
+    Solves planar Freudenstein vector loop equations:
+      - Ground frame link AD of length d
+      - Input crank link AB of length a (driven at angular velocity omega)
+      - Coupler connecting link BC of length b
+      - Output rocker link CD of length c
+    """
+    params = procedure.get("parameters", {})
+    a = float(params.get("crank_length", params.get("length_a", 1.0)))
+    b = float(params.get("coupler_length", params.get("length_b", 2.5)))
+    c = float(params.get("rocker_length", params.get("length_c", 2.0)))
+    d = float(params.get("ground_length", params.get("length_d", 3.0)))
+    rpm_in = float(params.get("rpm", params.get("cadence_rpm", 30.0)))
+
+    # Frame count & time array
+    frames = 120
+    time_array = [round(t * 0.05, 3) for t in range(frames)]
+    omega = (rpm_in * 2.0 * math.pi) / 60.0
+
+    # Fixed pivot positions
+    pivot_a = [0.0, 0.0, 0.0]
+    pivot_d = [d, 0.0, 0.0]
+
+    crank_positions = []
+    crank_rotations = []
+    coupler_positions = []
+    coupler_rotations = []
+    rocker_positions = []
+    rocker_rotations = []
+
+    for t in time_array:
+        theta2 = omega * t
+        xB = a * math.cos(theta2)
+        yB = a * math.sin(theta2)
+
+        # Distance from B to fixed pivot D
+        dist_bd_sq = (d - xB)**2 + yB**2
+        dist_bd = math.sqrt(dist_bd_sq)
+
+        # Law of cosines in triangle BCD
+        cos_ang_d = (c**2 + dist_bd_sq - b**2) / (2.0 * c * dist_bd)
+        cos_ang_d = max(-1.0, min(1.0, cos_ang_d))
+        ang_bdc = math.acos(cos_ang_d)
+
+        beta = math.atan2(yB, d - xB)
+        theta4 = math.pi - (beta + ang_bdc)
+
+        xC = d + c * math.cos(theta4)
+        yC = c * math.sin(theta4)
+
+        theta3 = math.atan2(yC - yB, xC - xB)
+
+        # Link centers & orientations
+        # Crank: centered at (xB/2, yB/2) with length a
+        crank_positions.append([round(xB / 2.0, 4), round(yB / 2.0, 4), 0.0])
+        crank_rotations.append([0.0, 0.0, round(theta2 - math.pi / 2, 4)])
+
+        # Coupler: centered at ((xB+xC)/2, (yB+yC)/2) with length b
+        coupler_positions.append([round((xB + xC) / 2.0, 4), round((yB + yC) / 2.0, 4), 0.0])
+        coupler_rotations.append([0.0, 0.0, round(theta3 - math.pi / 2, 4)])
+
+        # Rocker: centered at (d + (xC-d)/2, yC/2) with length c
+        rocker_positions.append([round((d + xC) / 2.0, 4), round(yC / 2.0, 4), 0.0])
+        rocker_rotations.append([0.0, 0.0, round(theta4 - math.pi / 2, 4)])
+
+    objects = [
+        # Ground Frame Base Plate
+        SceneObject(
+            id="ground_base",
+            name="Ground Frame Link AD",
+            type="box",
+            position=[round(d / 2.0, 3), -0.2, 0.0],
+            dimensions={"width": d + 1.0, "height": 0.15, "depth": 0.8},
+            material=MaterialConfig(color="#1e293b", metalness=0.8, roughness=0.3)
+        ),
+        # Fixed Pivot A
+        SceneObject(
+            id="pivot_a",
+            name="Fixed Pivot A (Crank Ground)",
+            type="cylinder",
+            position=[0.0, 0.0, 0.0],
+            rotation=[math.pi / 2, 0.0, 0.0],
+            dimensions={"radius": 0.12, "height": 0.3},
+            material=MaterialConfig(color="#475569", metalness=0.9, roughness=0.2)
+        ),
+        # Fixed Pivot D
+        SceneObject(
+            id="pivot_d",
+            name="Fixed Pivot D (Rocker Ground)",
+            type="cylinder",
+            position=[d, 0.0, 0.0],
+            rotation=[math.pi / 2, 0.0, 0.0],
+            dimensions={"radius": 0.12, "height": 0.3},
+            material=MaterialConfig(color="#475569", metalness=0.9, roughness=0.2)
+        ),
+        # Crank Link AB
+        SceneObject(
+            id="crank_link",
+            name="Input Crank Link AB",
+            type="cylinder",
+            position=crank_positions[0],
+            rotation=crank_rotations[0],
+            dimensions={"radius": 0.06, "height": a},
+            material=MaterialConfig(color="#06b6d4", metalness=0.6, roughness=0.3)
+        ),
+        # Coupler Link BC
+        SceneObject(
+            id="coupler_link",
+            name="Coupler Connecting Rod BC",
+            type="cylinder",
+            position=coupler_positions[0],
+            rotation=coupler_rotations[0],
+            dimensions={"radius": 0.05, "height": b},
+            material=MaterialConfig(color="#f59e0b", metalness=0.6, roughness=0.3)
+        ),
+        # Rocker Link CD
+        SceneObject(
+            id="rocker_link",
+            name="Output Rocker Link CD",
+            type="cylinder",
+            position=rocker_positions[0],
+            rotation=rocker_rotations[0],
+            dimensions={"radius": 0.06, "height": c},
+            material=MaterialConfig(color="#10b981", metalness=0.6, roughness=0.3)
+        ),
+    ]
+
+    tracks = {
+        "crank_link": AnimationTrack(position=crank_positions, rotation=crank_rotations),
+        "coupler_link": AnimationTrack(position=coupler_positions, rotation=coupler_rotations),
+        "rocker_link": AnimationTrack(position=rocker_positions, rotation=rocker_rotations),
+    }
+
+    overlays = [
+        MeasurementOverlay(
+            id="m_crank_length",
+            label="Crank Length a",
+            value=round(a, 2),
+            unit="m",
+            target_object_id="crank_link",
+            position_3d=[0.0, round(a / 2.0, 2), 0.15],
+            is_dynamic=False
+        ),
+        MeasurementOverlay(
+            id="m_rocker_length",
+            label="Rocker Length c",
+            value=round(c, 2),
+            unit="m",
+            target_object_id="rocker_link",
+            position_3d=[d, round(c / 2.0, 2), 0.15],
+            is_dynamic=False
+        ),
+    ]
+
+    return SceneSpecification(
+        version="2.0.0",
+        domain="mechanical_engineering",
+        experiment_id="four_bar_linkage",
+        scene_template="four_bar_linkage",
+        title="Four-Bar Planar Mechanism Kinematics",
+        description=f"Kinematic simulation of four-bar mechanism: crank a={a}m, coupler b={b}m, rocker c={c}m, ground d={d}m with continuous Freudenstein loop trajectory.",
+        is_simulation_backed=True,
+        confidence_score=0.98,
+        camera=CameraConfig(position=[d / 2.0, 1.5, 4.5], target=[d / 2.0, 0.8, 0.0], fov=45),
+        lighting=LightingConfig(ambient_intensity=0.85, directional_position=[4.0, 7.0, 4.0]),
+        objects=objects,
+        parameters=[
+            ParameterConfig(name="crank_length", label="Crank Length a", type="float", value=a, min_val=0.5, max_val=2.0, step=0.1, unit="m"),
+            ParameterConfig(name="coupler_length", label="Coupler Length b", type="float", value=b, min_val=1.5, max_val=4.0, step=0.1, unit="m"),
+            ParameterConfig(name="rocker_length", label="Rocker Length c", type="float", value=c, min_val=1.0, max_val=3.5, step=0.1, unit="m"),
+            ParameterConfig(name="ground_length", label="Ground Length d", type="float", value=d, min_val=1.5, max_val=5.0, step=0.1, unit="m"),
+        ],
+        animation=AnimationConfig(
+            has_animation=True,
+            duration_s=6.0,
+            time_step_s=0.05,
+            time_array=time_array,
+            tracks=tracks
+        ),
+        measurement_overlays=overlays,
+        controls=SceneControlsConfig(allow_orbit=True, allow_pan=True, allow_zoom=True, show_grid=True)
+    )
+

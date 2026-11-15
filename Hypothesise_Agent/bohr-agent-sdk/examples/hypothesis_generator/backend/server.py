@@ -54,6 +54,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from backend.routers.visualization import router as visualization_router
+app.include_router(visualization_router)
+
 
 # ─── Request Models ──────────────────────────────────────────────────────
 

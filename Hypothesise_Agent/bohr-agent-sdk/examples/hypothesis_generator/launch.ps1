@@ -1,4 +1,4 @@
-﻿# Launch Experimental Design Agent UI
+# Launch Experimental Design Agent UI
 # This PowerShell script starts both backend and frontend servers
 
 Write-Host ""

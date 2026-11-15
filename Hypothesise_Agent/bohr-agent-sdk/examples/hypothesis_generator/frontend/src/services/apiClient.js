@@ -200,3 +200,79 @@ export async function runImprovementCycle() {
     throw new Error(`Failed to run improvement cycle: ${error.message}`)
   }
 }
+
+/**
+ * Fetch local LM Studio model residency and scheduler telemetry
+ */
+export async function fetchModelStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/api/visualization/model-status`)
+    if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`)
+    return await response.json()
+  } catch (error) {
+    return {
+      status: 'offline',
+      loaded_instances: {},
+      available_models: [],
+      error: error.message,
+    }
+  }
+}
+
+/**
+ * Fetch supported open-access scientific diagram repositories
+ */
+export async function fetchReferenceSources() {
+  try {
+    const response = await fetch(`${API_BASE}/api/visualization/reference-sources`)
+    if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`)
+    return await response.json()
+  } catch (error) {
+    return {
+      providers: [],
+      curated_domains: [],
+      error: error.message,
+    }
+  }
+}
+
+/**
+ * Run multi-model vision-assisted 3D visualization pipeline
+ */
+export async function runVisualizationPipeline(topic, domain = null, userRefUrl = null) {
+  try {
+    const response = await fetch(`${API_BASE}/api/visualization/pipeline-run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        domain: domain || undefined,
+        user_reference_url: userRefUrl || undefined,
+      }),
+    })
+    if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`)
+    return await response.json()
+  } catch (error) {
+    throw new Error(`Visualization pipeline failed: ${error.message}`)
+  }
+}
+
+/**
+ * Stream multi-model visualization pipeline progress events
+ */
+export async function streamVisualizationPipeline(topic, domain = null, userRefUrl = null) {
+  const response = await fetch(`${API_BASE}/api/visualization/pipeline-stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      topic,
+      domain: domain || undefined,
+      user_reference_url: userRefUrl || undefined,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`Server returned HTTP ${response.status}`)
+  }
+  return response
+}
+
