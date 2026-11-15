@@ -207,12 +207,13 @@ function MechDimension({ dim }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function MechVisualizer({ visualData }) {
+export default function MechVisualizer({ visualData, data }) {
   const [hovered, setHovered] = useState(null)
 
-  if (!visualData || !visualData.parts) return null
+  const activeData = visualData || data
+  if (!activeData || !activeData.parts) return null
 
-  const { title, width = 720, height = 460, parts, dimensions = [], annotations = [] } = visualData
+  const { title, width = 720, height = 460, parts, dimensions = [], annotations = [] } = activeData
 
   const renderPart = (part) => {
     switch (part.type) {

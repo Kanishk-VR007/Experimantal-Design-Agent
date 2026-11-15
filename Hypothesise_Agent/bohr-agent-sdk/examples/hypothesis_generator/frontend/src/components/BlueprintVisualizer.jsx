@@ -202,13 +202,14 @@ function MemberElement({ el }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function BlueprintVisualizer({ visualData }) {
+export default function BlueprintVisualizer({ visualData, data }) {
   const [hovered, setHovered] = useState(null)
 
-  if (!visualData || !visualData.elements) return null
+  const activeData = visualData || data
+  if (!activeData || !activeData.elements) return null
 
-  const { title, width = 720, height = 520, elements, annotations = [] } = visualData
-  const isStructural = visualData.blueprint_type === 'structural'
+  const { title, width = 720, height = 520, elements, annotations = [] } = activeData
+  const isStructural = activeData.blueprint_type === 'structural'
 
   const renderElement = (el) => {
     switch (el.type) {

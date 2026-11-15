@@ -1,15 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Plot from 'react-plotly.js'
 import CircuitVisualizer from './CircuitVisualizer'
 import BlueprintVisualizer from './BlueprintVisualizer'
 import MechVisualizer from './MechVisualizer'
-import SampleTestVisualizer from './SampleTestVisualizer'
+import AlgorithmVisualizer from './AlgorithmVisualizer'
+import Experiment3DViewer from './visualization/Experiment3DViewer'
 import './SimulationResults.css'
 
-function SimulationResults({ simulation }) {
+function SimulationResults({ simulation, onSimulationUpdated }) {
+  const [currentSim, setCurrentSim] = useState(simulation)
   const [expandedPlot, setExpandedPlot] = useState(null)
 
-  if (!simulation) return null
+  useEffect(() => {
+    setCurrentSim(simulation)
+  }, [simulation])
+
+  if (!currentSim) return null
 
   const {
     status,
@@ -23,7 +29,15 @@ function SimulationResults({ simulation }) {
     simulation_log,
     visualization_type = 'graph',
     visual_data,
-  } = simulation
+    visualization_spec,
+  } = currentSim
+
+  const handleSimUpdated = (updatedSim) => {
+    setCurrentSim(updatedSim)
+    if (onSimulationUpdated) {
+      onSimulationUpdated(updatedSim)
+    }
+  }
 
   // Build Plotly traces — supports single series and multi-series (extra_series)
   const getPlotlyTraces = (plot) => {
@@ -47,7 +61,7 @@ function SimulationResults({ simulation }) {
         traces.push({
           x: plot.x,
           y: s.y,
-          type: 'scatter',
+          type: plot.plot_type === 'bar' ? 'bar' : 'scatter',
           mode: baseMode,
           name: s.name,
           line: { color: s.color || COLORS[(idx + 1) % COLORS.length], width: 2.5 },
@@ -66,6 +80,7 @@ function SimulationResults({ simulation }) {
     plot_bgcolor: 'rgba(15,23,42,1)',
     font: { color: '#cbd5e1', size: 11 },
     legend: { font: { color: '#cbd5e1', size: 10 }, bgcolor: 'rgba(0,0,0,0)' },
+    autosize: !expanded,
     width: expanded ? 900 : undefined,
     height: expanded ? 520 : 380,
     margin: { l: 60, r: 30, t: 45, b: 60 },
@@ -78,7 +93,7 @@ function SimulationResults({ simulation }) {
 
   const domainIcon = {
     electronics: '⚡', circuit: '⚡', arduino: '⚡',
-    chemistry: '🧪', biology: '🧬', biological: '🧬', physics: '⚛',
+    chemistry: '🧪', physics: '⚛',
     computer_science: '🤖', cs: '🤖', machine_learning: '🤖',
     civil_engineering: '🏗', civil: '🏗', structural: '🏗',
     mechanical_engineering: '⚙️', mechanical: '⚙️', mech: '⚙️',
@@ -120,6 +135,20 @@ function SimulationResults({ simulation }) {
         </p>
       </div>
 
+      {/* ── Interactive 3D Scientific Visualization Engine ── */}
+      {visualization_spec && (
+        <div className="sim-section sim-3d-section">
+          <h3>🌐 Interactive 3D Experiment Simulation</h3>
+          <Experiment3DViewer
+            visualizationSpec={visualization_spec}
+            domain={domain}
+            topic={hypothesis}
+            procedure={currentSim.procedure}
+            onSimulationUpdated={handleSimUpdated}
+          />
+        </div>
+      )}
+
       {/* ── Interactive Circuit View (Electronics) ── */}
       {visualization_type === 'circuit' && visual_data && (
         <div className="sim-section">
@@ -144,11 +173,11 @@ function SimulationResults({ simulation }) {
         </div>
       )}
 
-      {/* ── Sample Testing View (Biology) ── */}
-      {visualization_type === 'sample_testing' && visual_data && (
+      {/* ── Computational Architecture / Algorithm View (Computer Science) ── */}
+      {(visualization_type === 'algorithm' || visualization_type === 'neural_network' || domain === 'cs' || domain === 'computer_science') && visual_data && (
         <div className="sim-section">
-          <h3>🧪 Sample Testing  <span style={{fontSize:'0.75rem', color:'#64748b', fontWeight:400}}>— hover wells for OD600 readings</span></h3>
-          <SampleTestVisualizer visualData={visual_data} />
+          <h3>💻 Computational Architecture &amp; Algorithm Visualizer</h3>
+          <AlgorithmVisualizer visualData={visual_data} />
         </div>
       )}
 
@@ -190,9 +219,10 @@ function SimulationResults({ simulation }) {
                 <Plot
                   data={getPlotlyTraces(plot)}
                   layout={getPlotLayout(plot, expandedPlot === index)}
+                  useResizeHandler={true}
                   config={{ displayModeBar: true, displaylogo: false,
                     modeBarButtonsToRemove: ['lasso2d', 'select2d'] }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: expandedPlot === index ? 520 : 380 }}
                 />
                 <button className="expand-plot-btn"
                   onClick={() => setExpandedPlot(expandedPlot === index ? null : index)}>

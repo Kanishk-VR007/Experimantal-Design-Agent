@@ -1,10 +1,11 @@
+import sys
 import time
 import subprocess
 import requests
 
 def test_memory_agent():
     print("Starting memory agent...")
-    process = subprocess.Popen(["python", "memory_agent/main.py"])
+    process = subprocess.Popen([sys.executable, "memory_agent/main.py"])
     
     # wait for it to start
     time.sleep(3)

@@ -61,11 +61,10 @@ Ensure the output represents a valid static 2D simulation. Generate realistic, s
 
 
 def run_with_ollama(procedure: dict, error_context: str = "") -> dict:
-    """Fallback using local Ollama instance"""
+    """Fallback using configured local LLM (LM Studio OREAL-DeepSeek-R1 first, Ollama second)."""
     try:
-        OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-        
+        from ..llm_client import chat_completion
+
         prompt = f"""You are a scientific simulation engine. Generate a simulation for this experiment.
 
 Experiment Procedure:
@@ -92,39 +91,32 @@ Return ONLY valid JSON (no markdown) with this structure:
 
 Ensure the output represents a valid static 2D simulation. Generate realistic scientific data with 50-200 data points in 1D arrays for x and y. Do not include any 3D properties or animated data."""
 
-        response = requests.post(
-            f"{OLLAMA_URL}/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "temperature": 0.3,
-                "top_p": 0.9,
-                "num_predict": 4096,
-                "stream": False
-            },
-            timeout=180
+        raw_text = chat_completion(
+            messages=[
+                {"role": "system", "content": "Return ONLY a valid JSON object matching the schema."},
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": "<think>\n</think>\n{\n"},
+            ],
+            temperature=0.2,
+            max_tokens=1600,
+            timeout=60,
         )
-        
-        if response.status_code == 200:
-            data = response.json()
-            raw_text = data.get("response", "")
-            
-            # Clean markdown
+
+        if raw_text:
             clean = re.sub(r"```json|```", "", raw_text).strip()
-            
-            # Try to parse JSON
+            if not clean.startswith("{"):
+                clean = "{\n" + clean
             try:
                 return json.loads(clean)
             except json.JSONDecodeError:
-                # Extract JSON from mixed content
-                json_match = re.search(r'\{.*\}', clean, re.DOTALL)
+                json_match = re.search(r"\{.*\}", clean, re.DOTALL)
                 if json_match:
                     return json.loads(json_match.group(0))
-        
-        raise Exception(f"Ollama returned status {response.status_code}")
-        
+
+        raise RuntimeError("Local LLM returned invalid or empty JSON")
+
     except Exception as e:
-        print(f"⚠️  Ollama fallback failed: {e}")
+        print(f"⚠️  Local LLM fallback failed: {e}")
         return get_minimal_fallback(procedure)
 
 

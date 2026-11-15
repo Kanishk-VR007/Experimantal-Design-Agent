@@ -277,10 +277,11 @@ function Tooltip({ comp, canvasWidth }) {
 
 // ─── Main CircuitVisualizer component ────────────────────────────────────────
 
-function CircuitVisualizer({ visualData }) {
+function CircuitVisualizer({ visualData, data }) {
   const [hovered, setHovered] = useState(null)
 
-  if (!visualData) return null
+  const activeData = visualData || data
+  if (!activeData) return null
 
   const {
     title = 'Circuit Diagram',
@@ -288,7 +289,7 @@ function CircuitVisualizer({ visualData }) {
     height = 400,
     components = [],
     wires = [],
-  } = visualData
+  } = activeData
 
   const hoveredComp = hovered ? components.find(c => c.id === hovered) : null
 

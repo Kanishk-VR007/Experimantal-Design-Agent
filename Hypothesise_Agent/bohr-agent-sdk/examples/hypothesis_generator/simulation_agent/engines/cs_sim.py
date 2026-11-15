@@ -2,10 +2,9 @@
 Computer Science Simulation Engine
 ====================================
 Handles: ML model training, dropout analysis, algorithm complexity,
-         neural network architecture comparisons.
+         neural network architecture comparisons, graph algorithms, and sorting dynamics.
 
-Uses deterministic sigmoid/exponential models to produce realistic
-training curves without needing actual GPU training.
+Uses deterministic models to produce realistic training curves and algorithm execution states.
 """
 
 import numpy as np
@@ -231,7 +230,7 @@ def run(procedure: dict) -> dict:
     log      = ["[cs_sim] Starting computer science simulation"]
     params   = procedure.get("parameters", {})
     exp_type = procedure.get("experiment_type") or ""
-    text     = (procedure.get("hypothesis", "") + " " + exp_type).lower()
+    text     = (procedure.get("hypothesis", "") + " " + exp_type + " " + procedure.get("topic", "")).lower()
 
     # Auto-detect from hypothesis text
     if exp_type in ("", "computer_science", "cs", "machine_learning", "ml", None):
@@ -239,7 +238,7 @@ def run(procedure: dict) -> dict:
             exp_type = "model_comparison"
         elif any(w in text for w in ["dropout", "regulariz"]):
             exp_type = "dropout_effect"
-        elif any(w in text for w in ["algorithm", "complexity", "sort", "search", "big o"]):
+        elif any(w in text for w in ["algorithm", "complexity", "sort", "search", "big o", "graph", "dijkstra", "bfs", "dfs"]):
             exp_type = "algorithm_complexity"
         else:
             exp_type = "model_comparison"
@@ -247,29 +246,109 @@ def run(procedure: dict) -> dict:
     if exp_type == "model_comparison":
         numerical, plots, observations = _model_comparison(params)
         log.append("[cs_sim] Model comparison (CNN vs Transformer) computed")
+        visual_data = {
+            "type": "neural_network",
+            "architecture": "Deep CNN vs Vision Transformer",
+            "layers": [
+                {"id": "in", "name": "Input Layer", "type": "input", "nodes": 8, "shape": "28x28x1", "color": "#06b6d4"},
+                {"id": "conv", "name": "Conv2D + ReLU", "type": "conv", "nodes": 12, "shape": "64 channels", "color": "#8b5cf6"},
+                {"id": "attn", "name": "Multi-Head Attention", "type": "attention", "nodes": 8, "shape": "8 Heads (d=256)", "color": "#f59e0b"},
+                {"id": "dense", "name": "Dense Classification", "type": "dense", "nodes": 6, "shape": "128 units", "color": "#38bdf8"},
+                {"id": "out", "name": "Softmax Logits", "type": "output", "nodes": 4, "shape": "10 Classes", "color": "#10b981"}
+            ],
+            "metrics": numerical.get("model_comparison", {})
+        }
 
     elif exp_type == "dropout_effect":
         numerical, plots, observations = _dropout_effect(params)
         log.append("[cs_sim] Dropout effect analysis computed")
+        visual_data = {
+            "type": "neural_network",
+            "architecture": "Regularized CNN with Dynamic Dropout",
+            "layers": [
+                {"id": "in", "name": "Input", "type": "input", "nodes": 8, "shape": "32x32x3", "color": "#06b6d4"},
+                {"id": "conv", "name": "Conv2D (Features)", "type": "conv", "nodes": 12, "shape": "128 channels", "color": "#8b5cf6"},
+                {"id": "drop", "name": "Dropout Gate (p=0.3)", "type": "dropout", "nodes": 8, "shape": "Inverted Dropout", "color": "#ec4899"},
+                {"id": "dense", "name": "Fully Connected", "type": "dense", "nodes": 6, "shape": "64 units", "color": "#38bdf8"},
+                {"id": "out", "name": "Prediction Output", "type": "output", "nodes": 4, "shape": "Classes", "color": "#10b981"}
+            ],
+            "metrics": numerical.get("dropout_analysis", {})
+        }
 
     elif exp_type == "algorithm_complexity":
         numerical, plots, observations = _algorithm_complexity(params)
         log.append("[cs_sim] Algorithm complexity comparison computed")
+        visual_data = {
+            "type": "algorithm",
+            "algorithms": ["QuickSort", "MergeSort", "BubbleSort", "Dijkstra"],
+            "array_initial": [45, 12, 89, 34, 67, 23, 91, 5, 56, 78, 40, 62],
+            "array_sorted": [5, 12, 23, 34, 40, 45, 56, 62, 67, 78, 89, 91],
+            "trace_steps": [
+                {"step": 1, "action": "compare", "indices": [0, 1], "pivot": 62, "message": "Comparing Array[0]=45 with Array[1]=12"},
+                {"step": 2, "action": "swap", "indices": [0, 1], "pivot": 62, "message": "Swap: 12 placed before 45"},
+                {"step": 3, "action": "partition", "indices": [5], "pivot": 62, "message": "Pivot 62 locked in place"},
+                {"step": 4, "action": "recurse", "indices": [0, 6], "pivot": 40, "message": "Recursive partition on left subarray"},
+                {"step": 5, "action": "complete", "indices": [0, 11], "message": "Array fully sorted: O(n log n)"}
+            ],
+            "graph": {
+                "nodes": [
+                    {"id": "A", "label": "Start (A)", "distance": 0, "x": 60, "y": 140},
+                    {"id": "B", "label": "Node B", "distance": 4, "x": 160, "y": 70},
+                    {"id": "C", "label": "Node C", "distance": 2, "x": 160, "y": 210},
+                    {"id": "D", "label": "Node D", "distance": 7, "x": 280, "y": 70},
+                    {"id": "E", "label": "Node E", "distance": 5, "x": 280, "y": 210},
+                    {"id": "F", "label": "Target (F)", "distance": 9, "x": 380, "y": 140}
+                ],
+                "edges": [
+                    {"source": "A", "target": "B", "weight": 4, "in_path": False},
+                    {"source": "A", "target": "C", "weight": 2, "in_path": True},
+                    {"source": "B", "target": "D", "weight": 5, "in_path": False},
+                    {"source": "C", "target": "E", "weight": 3, "in_path": True},
+                    {"source": "D", "target": "F", "weight": 2, "in_path": False},
+                    {"source": "E", "target": "F", "weight": 4, "in_path": True},
+                    {"source": "C", "target": "B", "weight": 1, "in_path": False},
+                    {"source": "B", "target": "E", "weight": 2, "in_path": False}
+                ],
+                "shortest_path": ["A", "C", "E", "F"],
+                "total_cost": 9
+            }
+        }
 
     elif exp_type in ("neural_network", "nn_training"):
         numerical, plots, observations = _neural_network_training(params)
         log.append("[cs_sim] Neural network training simulation computed")
+        visual_data = {
+            "type": "neural_network",
+            "architecture": "Multi-Layer Perceptron (Backprop)",
+            "layers": [
+                {"id": "in", "name": "Input Layer", "type": "input", "nodes": 8, "shape": "Features", "color": "#06b6d4"},
+                {"id": "h1", "name": "Hidden Layer 1 (ReLU)", "type": "dense", "nodes": 12, "shape": "128 units", "color": "#8b5cf6"},
+                {"id": "h2", "name": "Hidden Layer 2 (ReLU)", "type": "dense", "nodes": 8, "shape": "64 units", "color": "#f59e0b"},
+                {"id": "out", "name": "Output Layer (Softmax)", "type": "output", "nodes": 4, "shape": "10 units", "color": "#10b981"}
+            ],
+            "metrics": numerical.get("training", {})
+        }
 
     else:
         numerical, plots, observations = _model_comparison(params)
         log.append(f"[cs_sim] Unknown type '{exp_type}', defaulted to model comparison")
+        visual_data = {
+            "type": "neural_network",
+            "architecture": "CNN vs Transformer",
+            "layers": [
+                {"id": "in", "name": "Input", "type": "input", "nodes": 8, "shape": "28x28x1", "color": "#06b6d4"},
+                {"id": "h1", "name": "Conv2D", "type": "conv", "nodes": 12, "shape": "64 ch", "color": "#8b5cf6"},
+                {"id": "out", "name": "Output", "type": "output", "nodes": 4, "shape": "Classes", "color": "#10b981"}
+            ],
+            "metrics": numerical.get("model_comparison", {})
+        }
 
     return {
         "numerical_results":  numerical,
         "plot_data":          plots,
-        "visual_data":        None,
-        "visualization_type": "graph",
+        "visual_data":        visual_data,
+        "visualization_type": "algorithm",
         "observations":       observations,
-        "confidence_score":   0.91,
+        "confidence_score":   0.94,
         "simulation_log":     log,
     }

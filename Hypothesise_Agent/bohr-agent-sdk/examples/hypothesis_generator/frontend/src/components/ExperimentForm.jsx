@@ -1,11 +1,11 @@
 import { useState } from 'react'
 
 const EXAMPLE_TOPICS = [
+  "Simple Pendulum Oscillation Experiment with 1.5m length",
+  "Water molecule (H2O) 3D tetrahedral geometry and bond angle",
+  "Simply supported steel beam deflection under 15 kN/m load",
   "Effect of dropout on CNN accuracy for image classification",
-  "Compare CNN vs Transformer models on CIFAR-10",
-  "LSTM vs GRU for time series prediction",
-  "Impact of batch normalization on deep learning performance",
-  "Comparison of optimization algorithms for neural networks"
+  "Compare CNN vs Transformer models on CIFAR-10"
 ]
 
 

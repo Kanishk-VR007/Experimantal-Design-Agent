@@ -1,268 +1,240 @@
-import { useState, useEffect } from 'react'
-import ExperimentForm from './components/ExperimentForm'
-import ExperimentOutput from './components/ExperimentOutput'
+import { useEffect } from 'react'
+import AppShell from './app/AppShell'
+import { useWorkspaceStore } from './stores/workspaceStore'
+import { useExperimentStore } from './stores/experimentStore'
+import { useBackendHealth } from './hooks/useBackendHealth'
+import { useDesignStream } from './hooks/useDesignStream'
+import { useSimulation } from './hooks/useSimulation'
+
+// Feature Components
+import ExperimentComposer from './features/experiments/ExperimentComposer'
+import ResearchPanel from './features/research/ResearchPanel'
+import RefinementPanel from './features/research/RefinementPanel'
+import ProtocolStream from './features/protocols/ProtocolStream'
+import ProtocolEditor from './features/protocols/ProtocolEditor'
+import SimulationWorkspace from './features/simulation/SimulationWorkspace'
+import AgentPipeline from './features/agent-activity/AgentPipeline'
+import EvaluationOverview from './features/evaluation/EvaluationOverview'
+import MemoryDashboard from './features/memory/MemoryDashboard'
+import SystemHealthMonitor from './features/system-monitor/SystemHealthMonitor'
+import ReportHistory from './features/evaluation/ReportHistory'
 import SimulationRunner from './components/SimulationRunner'
-import SimulationResults from './components/SimulationResults'
-import EvaluationDashboard from './components/EvaluationDashboard'
-import StatusBar from './components/StatusBar'
+import LiquidLoader from './components/LiquidLoader'
+
 import './App.css'
 
 function App() {
-  const [status, setStatus] = useState({ loading: true })
-  const [generating, setGenerating] = useState(false)
-  const [showSimulationRunner, setShowSimulationRunner] = useState(false)
-  const [output, setOutput] = useState({
-    papers: [],
-    design: '',
-    streaming: false,
-    complete: false
-  })
-  const [simulation, setSimulation] = useState(null)
-  const [currentTopic, setCurrentTopic] = useState('')
-  const [activeView, setActiveView] = useState('design') // 'design' | 'simulation' | 'evaluation'
+  const activeView = useWorkspaceStore((s) => s.activeView)
+  const setActiveView = useWorkspaceStore((s) => s.setActiveView)
 
-  // Check backend health on mount
-  useEffect(() => {
-    checkHealth()
-  }, [])
+  const { status, refresh: refreshHealth } = useBackendHealth()
+  const { startStream } = useDesignStream()
+  const { runSimulation } = useSimulation()
 
-  const checkHealth = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/health')
-      const data = await response.json()
-      setStatus({
-        loading: false,
-        healthy: data.status === 'healthy',
-        ollamaAvailable: data.ollama_available,
-        models: data.models
-      })
-    } catch (error) {
-      setStatus({
-        loading: false,
-        healthy: false,
-        error: 'Cannot connect to backend server'
-      })
-    }
-  }
+  // Experiment store state
+  const topic = useExperimentStore((s) => s.topic)
+  const setTopic = useExperimentStore((s) => s.setTopic)
+  const generating = useExperimentStore((s) => s.generating)
+  const simulating = useExperimentStore((s) => s.simulating)
+  const simulation = useExperimentStore((s) => s.simulation)
+  const setSimulation = useExperimentStore((s) => s.setSimulation)
+  const papers = useExperimentStore((s) => s.papers)
+  const design = useExperimentStore((s) => s.design)
+  const stage = useExperimentStore((s) => s.stage)
+  const refinement = useExperimentStore((s) => s.refinement)
+  const streaming = useExperimentStore((s) => s.streaming)
+  const complete = useExperimentStore((s) => s.complete)
+  const showSimulationRunner = useExperimentStore((s) => s.showSimulationRunner)
+  const setShowSimulationRunner = useExperimentStore((s) => s.setShowSimulationRunner)
 
-  const handleGenerate = async (formData) => {
-    setGenerating(true)
-    setCurrentTopic(formData.topic)
-    setSimulation(null)  // Clear previous simulation
-    setOutput({
-      papers: [],
-      design: '',
-      streaming: true,
-      complete: false
+  // Handle Generate Submission
+  const handleGenerate = (formData) => {
+    setTopic(formData.topic)
+    setActiveView('protocols')
+
+    startStream(formData, (finishedTopic, finishedDesign, refData) => {
+      // Auto-run simulation on protocol synthesis completion
+      runSimulation(finishedTopic, finishedDesign, refData, formData.domain)
     })
-
-    try {
-      // Use EventSource for Server-Sent Events
-      const eventSource = new EventSource(
-        `http://localhost:8000/api/generate-design?${new URLSearchParams({
-          topic: formData.topic,
-          max_papers: formData.maxPapers,
-          use_mock_data: formData.useMockData
-        })}`
-      )
-
-      // For POST requests, we need to use fetch with streaming
-      const response = await fetch('http://localhost:8000/api/generate-design', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topic: formData.topic,
-          max_papers: formData.maxPapers,
-          use_mock_data: formData.useMockData
-        })
-      })
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              
-              switch (data.type) {
-                case 'start':
-                  console.log('Generation started')
-                  break
-                
-                case 'papers':
-                  setOutput(prev => ({
-                    ...prev,
-                    papers: data.papers
-                  }))
-                  break
-                
-                case 'chunk':
-                  setOutput(prev => ({
-                    ...prev,
-                    design: prev.design + data.text
-                  }))
-                  break
-                
-                case 'complete':
-                  setOutput(prev => ({
-                    ...prev,
-                    streaming: false,
-                    complete: true
-                  }))
-                  setGenerating(false)
-                  break
-                
-                case 'error':
-                  console.error('Error:', data.message)
-                  setGenerating(false)
-                  setOutput(prev => ({
-                    ...prev,
-                    streaming: false,
-                    error: data.message
-                  }))
-                  break
-              }
-            } catch (e) {
-              console.error('Parse error:', e)
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Generation error:', error)
-      setGenerating(false)
-      setOutput(prev => ({
-        ...prev,
-        streaming: false,
-        error: error.message
-      }))
-    }
   }
 
+  // Handle Manual Re-run Simulation
   const handleRunSimulation = () => {
-    if (!output.design || !output.complete) {
-      alert('Please generate an experimental design first!')
+    if (!design || !complete) {
+      alert('Please formulate an experimental design protocol first!')
       return
     }
     setShowSimulationRunner(true)
+  }
+
+  const handleSimulationComplete = (simData) => {
+    setSimulation(simData)
+    setShowSimulationRunner(false)
     setActiveView('simulation')
   }
 
-  const handleSimulationComplete = (simulationData) => {
-    setSimulation(simulationData)
-  }
+  // Render view corresponding to current activeView in workspace
+  const renderWorkspaceContent = () => {
+    // While generating and no design chunks arrived yet, show animated LiquidLoader
+    if (generating && !design) {
+      return (
+        <div className="workspace-loader-container">
+          <LiquidLoader message={stage || 'Synthesizing Experimental Protocol via Multi-Agent LLMs...'} />
+          <button
+            type="button"
+            className="loader-cancel-btn"
+            style={{
+              marginTop: '1.5rem',
+              padding: '0.5rem 1.25rem',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '8px',
+              color: '#fca5a5',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => {
+              useExperimentStore.getState().setGenerating(false)
+              useExperimentStore.getState().updateOutput({ streaming: false, error: 'Operation cancelled by user.' })
+              setActiveView('overview')
+            }}
+          >
+            Cancel & Return to Studio
+          </button>
+          {refinement && <RefinementPanel refinement={refinement} />}
+        </div>
+      )
+    }
 
-  const handleCloseSimulationRunner = () => {
-    setShowSimulationRunner(false)
+    switch (activeView) {
+      case 'overview':
+        return (
+          <div className="view-page-container">
+            <ExperimentComposer
+              onGenerate={handleGenerate}
+              generating={generating}
+              disabled={!status?.healthy}
+            />
+          </div>
+        )
+
+      case 'protocols':
+        return (
+          <div className="view-page-container">
+            {refinement && <RefinementPanel refinement={refinement} />}
+            <ProtocolStream
+              design={design}
+              streaming={streaming}
+              complete={complete}
+              topic={topic}
+              papers={papers}
+              onRunSimulation={handleRunSimulation}
+              hasSimulation={simulation !== null}
+              simulating={simulating}
+            />
+            {complete && (
+              <ProtocolEditor
+                design={design}
+                topic={topic}
+                papers={papers}
+              />
+            )}
+          </div>
+        )
+
+      case 'simulation':
+        return (
+          <div className="view-page-container no-padding">
+            <SimulationWorkspace
+              simulation={simulation}
+              onSimulationUpdated={setSimulation}
+            />
+          </div>
+        )
+
+      case 'papers':
+        return (
+          <div className="view-page-container">
+            <ResearchPanel papers={papers} />
+          </div>
+        )
+
+      case 'agent-activity':
+        return (
+          <div className="view-page-container">
+            <AgentPipeline />
+          </div>
+        )
+
+      case 'evaluation':
+        return (
+          <div className="view-page-container">
+            <EvaluationOverview
+              simulation={simulation}
+              design={design}
+            />
+          </div>
+        )
+
+      case 'memory':
+        return (
+          <div className="view-page-container">
+            <MemoryDashboard />
+          </div>
+        )
+
+      case 'history':
+        return (
+          <div className="view-page-container">
+            <ReportHistory
+              onSelectReport={(r) => {
+                setTopic(r.topic || '')
+                setActiveView('evaluation')
+              }}
+            />
+          </div>
+        )
+
+      case 'settings':
+        return (
+          <div className="view-page-container">
+            <SystemHealthMonitor
+              status={status}
+              onRefresh={refreshHealth}
+            />
+          </div>
+        )
+
+      default:
+        return (
+          <div className="view-page-container">
+            <ExperimentComposer
+              onGenerate={handleGenerate}
+              generating={generating}
+              disabled={!status?.healthy}
+            />
+          </div>
+        )
+    }
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>🔬 Experimental Design Agent</h1>
-        <p>AI-powered scientific experiment designer using Ollama</p>
-      </header>
-
-      <StatusBar status={status} onRefresh={checkHealth} />
-
-      {/* ── Top-level navigation ───────────────────────────────── */}
-      <nav className="app-nav">
-        <button
-          className={`app-nav-btn ${activeView !== 'evaluation' ? 'active' : ''}`}
-          onClick={() => setActiveView(simulation ? 'simulation' : 'design')}
-        >
-          🔬 Lab
-        </button>
-        <button
-          className={`app-nav-btn ${activeView === 'evaluation' ? 'active' : ''}`}
-          onClick={() => setActiveView('evaluation')}
-        >
-          📊 Evaluation
-        </button>
-      </nav>
-
-      {/* ── Evaluation view ─────────────────────────────────────── */}
-      {activeView === 'evaluation' && (
-        <div className="eval-page">
-          <EvaluationDashboard simulation={simulation} design={output.design} />
-        </div>
-      )}
-
-      {/* ── Lab view ────────────────────────────────────────────── */}
-      {activeView !== 'evaluation' && (
-      <div className="app-container">
-        <div className="sidebar">
-          <ExperimentForm 
-            onGenerate={handleGenerate}
-            generating={generating}
-            disabled={!status.healthy || status.loading}
-          />
-        </div>
-
-        <div className="main-content">
-          {/* View Toggle (only show when simulation exists) */}
-          {simulation && (
-            <div className="view-toggle">
-              <button 
-                className={`toggle-btn ${activeView === 'design' ? 'active' : ''}`}
-                onClick={() => setActiveView('design')}
-              >
-                📄 Experimental Design
-              </button>
-              <button 
-                className={`toggle-btn ${activeView === 'simulation' ? 'active' : ''}`}
-                onClick={() => setActiveView('simulation')}
-              >
-                🔬 Simulation Report
-              </button>
-            </div>
-          )}
-
-          {/* Design View */}
-          {activeView === 'design' && (
-            <ExperimentOutput 
-              papers={output.papers}
-              design={output.design}
-              streaming={output.streaming}
-              complete={output.complete}
-              error={output.error}
-              onRunSimulation={handleRunSimulation}
-              hasSimulation={simulation !== null}
-            />
-          )}
-
-          {/* Simulation Report View */}
-          {activeView === 'simulation' && simulation && (
-            <SimulationResults simulation={simulation} />
-          )}
-        </div>
-      </div>
-      )} {/* end lab view */}
+    <AppShell status={status} onRefreshHealth={refreshHealth}>
+      {renderWorkspaceContent()}
 
       {/* Simulation Runner Modal */}
       {showSimulationRunner && (
         <SimulationRunner
-          topic={currentTopic}
-          design={output.design}
+          topic={topic}
+          design={design}
+          domain={useExperimentStore.getState().domain}
           onSimulationComplete={handleSimulationComplete}
-          onClose={handleCloseSimulationRunner}
+          onClose={() => setShowSimulationRunner(false)}
         />
       )}
-    </div>
+    </AppShell>
   )
 }
 

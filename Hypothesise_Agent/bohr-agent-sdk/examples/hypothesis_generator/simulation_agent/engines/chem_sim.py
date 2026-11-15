@@ -13,7 +13,7 @@ try:
     RDKIT_AVAILABLE = True
 except ImportError:
     RDKIT_AVAILABLE = False
-    print("⚠️  RDKit not available - chemistry simulations will be limited")
+    print("[WARNING] RDKit not available - chemistry simulations will be limited")
 
 
 def run(procedure: dict) -> dict:
@@ -57,6 +57,12 @@ def run(procedure: dict) -> dict:
 
     sol = solve_ivp(first_order, t_span, [C0], t_eval=t_eval, method="RK45")
     concentration = sol.y[0]
+    product_conc = C0 - concentration
+    reaction_rate = k * concentration
+
+    # Arrhenius temperature sensitivity sweep (273K to 373K)
+    temps = np.linspace(273.15, 373.15, 80)
+    k_sweep = A * np.exp(-Ea / (R * temps))
 
     results["kinetics"] = {
         "rate_constant_k": float(k),
@@ -64,6 +70,12 @@ def run(procedure: dict) -> dict:
         "final_concentration_M": float(concentration[-1]),
         "conversion_percent": float((1 - concentration[-1] / C0) * 100),
         "temperature_K": T,
+    }
+    results["thermodynamics"] = {
+        "activation_energy_kJ_mol": round(Ea / 1000.0, 2),
+        "initial_rate_M_s": round(float(reaction_rate[0]), 6),
+        "final_rate_M_s": round(float(reaction_rate[-1]), 6),
+        "rate_at_350K": float(A * np.exp(-Ea / (R * 350.0))),
     }
     log.append(f"[chem_sim] Rate constant k={k:.4e}, Half-life={results['kinetics']['half_life_s']:.2f}s")
 
@@ -74,7 +86,26 @@ def run(procedure: dict) -> dict:
         "y_label": "Concentration (M)",
         "x": t_eval.tolist(),
         "y": concentration.tolist(),
-        "series_name": "Reactant Concentration",
+        "series_name": "Reactant [A]",
+        "extra_series": [{"y": product_conc.tolist(), "name": "Product [P]", "color": "#10b981"}],
+    })
+    plots.append({
+        "plot_type": "line",
+        "title": "Instantaneous Reaction Rate vs Time",
+        "x_label": "Time (s)",
+        "y_label": "Rate -d[A]/dt (M/s)",
+        "x": t_eval.tolist(),
+        "y": reaction_rate.tolist(),
+        "series_name": "Reaction Rate",
+    })
+    plots.append({
+        "plot_type": "line",
+        "title": "Arrhenius Sensitivity: Rate Constant k vs Temperature",
+        "x_label": "Temperature (K)",
+        "y_label": "Rate Constant k (s⁻¹)",
+        "x": temps.tolist(),
+        "y": k_sweep.tolist(),
+        "series_name": "k(T) = A·exp(-Ea/RT)",
     })
 
     # ── Step 3: pH titration curve (if pH experiment) ──────────

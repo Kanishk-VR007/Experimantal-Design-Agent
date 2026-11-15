@@ -12,6 +12,151 @@ import numpy as np
 
 # ─── Structural analysis helpers ─────────────────────────────────────────
 
+def _cantilever_beam(params):
+    """
+    Cantilever beam under uniform distributed load (UDL).
+    Fixed clamp support at root (x=0), free tip at (x=L).
+    Euler-Bernoulli fourth-order equation:
+      y(x) = (w * x^2) / (24 * E * I) * (x^2 - 4*L*x + 6*L^2)
+      Tip deflection: y(L) = w * L^4 / (8 * E * I)
+      Max Bending Moment at root: M_fixed = -w * L^2 / 2
+      Shear Force: V(x) = w * (L - x)
+    """
+    L       = float(params.get("span_m") or params.get("L") or params.get("length_m", 3.0))
+    raw_w   = float(params.get("load_kN_per_m") or params.get("w", 5.0))
+    w       = raw_w / 1000.0 if raw_w > 50 else raw_w  # kN/m
+    raw_E   = float(params.get("elastic_modulus_GPa") or params.get("E", 200.0))
+    E_GPa   = raw_E / 1e9 if raw_E > 1e6 else raw_E
+    E       = E_GPa * 1e6   # kN/m²
+    I       = float(params.get("moment_of_inertia_m4") or params.get("I", 8.333e-6))
+    b_width = float(params.get("beam_width_mm", 300))
+    b_depth = float(params.get("beam_depth_mm", 500))
+
+    # Reactions at fixed support (x=0)
+    R_fixed = w * L                          # kN
+    M_fixed = (w * (L ** 2)) / 2.0           # kN·m magnitude
+
+    # Discrete coordinates
+    x = np.linspace(0, L, 400)
+    V = w * (L - x)                          # Shear force (kN)
+    M = -(w * ((L - x) ** 2)) / 2.0          # Bending moment (kN·m)
+
+    # Deflection profile: y(x) = (w*x^2)/(24*E*I) * (x^2 - 4*L*x + 6*L^2) * 1000 (mm)
+    y_m = (w * (x ** 2) / (24.0 * E * I)) * (x ** 2 - 4.0 * L * x + 6.0 * (L ** 2))
+    delta_profile = y_m * 1000.0             # mm
+    delta_tip = float(delta_profile[-1])     # mm
+
+    # Max bending stress at fixed clamp root: sigma = M_fixed * (depth/2) / I
+    sigma_max = M_fixed * (b_depth / 2.0 / 1000.0) / I / 1000.0  # MPa
+
+    numerical = {
+        "cantilever_analysis": {
+            "span_m":                 L,
+            "load_kN_per_m":          round(w, 3),
+            "fixed_reaction_kN":      round(R_fixed, 2),
+            "fixed_moment_kNm":       round(float(M_fixed), 2),
+            "tip_deflection_mm":      round(float(delta_tip), 3),
+            "max_bending_stress_MPa": round(float(sigma_max), 2),
+            "elastic_modulus_GPa":    E_GPa,
+            "moment_of_inertia_m4":   I,
+        }
+    }
+
+    plots = [
+        {
+            "plot_type": "line",
+            "title": "Cantilever Beam — Elastic Deflection Profile y(x)",
+            "x_label": "Position along beam x (m)",
+            "y_label": "Deflection y(x) (mm)",
+            "x": x.tolist(),
+            "y": delta_profile.tolist(),
+            "series_name": "Deflection",
+        },
+        {
+            "plot_type": "line",
+            "title": "Bending Moment Diagram (BMD)",
+            "x_label": "Position along beam x (m)",
+            "y_label": "Bending Moment M (kN·m)",
+            "x": x.tolist(),
+            "y": M.tolist(),
+            "series_name": "Moment (M)",
+        },
+        {
+            "plot_type": "line",
+            "title": "Shear Force Diagram (SFD)",
+            "x_label": "Position along beam x (m)",
+            "y_label": "Shear Force V (kN)",
+            "x": x.tolist(),
+            "y": V.tolist(),
+            "series_name": "Shear (V)",
+        },
+    ]
+
+    # Blueprint: side elevation of cantilever beam
+    bx, by = 80, 140
+    bw = 560
+    bh = 40
+    visual_data = {
+        "blueprint_type": "structural",
+        "title": f"Cantilever Beam — {L}m span, UDL {w} kN/m, Fixed Clamp at x=0",
+        "width": 720,
+        "height": 420,
+        "elements": [
+            {
+                "id": "FIXED_CLAMP", "type": "fixed_support",
+                "x": bx - 20, "y": by - 20, "width": 20, "height": bh + 40,
+                "label": f"Fixed Root (R={round(R_fixed,1)} kN, M={round(M_fixed,1)} kNm)",
+                "properties": {"reaction_kN": round(R_fixed, 2), "moment_kNm": round(M_fixed, 2)},
+            },
+            {
+                "id": "BEAM", "type": "beam",
+                "x": bx, "y": by, "width": bw, "height": bh,
+                "label": f"Cantilever Beam {int(b_width)}×{int(b_depth)}mm",
+                "properties": {
+                    "span_m": L, "width_mm": b_width, "depth_mm": b_depth,
+                    "E_GPa": E_GPa, "I_m4": I,
+                },
+            },
+            {
+                "id": "UDL", "type": "distributed_load",
+                "x": bx, "y": by - 55, "width": bw,
+                "label": f"w = {w} kN/m",
+                "properties": {"load_kN_per_m": w},
+            },
+            {
+                "id": "DIM_L", "type": "dimension",
+                "x1": bx, "y1": by + bh + 70, "x2": bx + bw, "y2": by + bh + 70,
+                "label": f"{L} m",
+                "properties": {},
+            },
+            {
+                "id": "TIP_DEFL", "type": "deflection_indicator",
+                "x": bx + bw, "y": by + bh + 10,
+                "delta_mm": round(float(delta_tip), 2),
+                "label": f"δ_tip = {round(float(delta_tip),2)} mm",
+                "properties": {"tip_deflection_mm": round(float(delta_tip), 3)},
+            },
+        ],
+        "annotations": [
+            {"x": bx + 10, "y": by + bh + 38,
+             "text": f"M_fixed = {round(float(M_fixed),2)} kN·m", "color": "#f59e0b"},
+            {"x": bx + 10, "y": by + bh + 55,
+             "text": f"σ_max = {round(float(sigma_max),1)} MPa", "color": "#ef4444"},
+            {"x": bx + bw - 120, "y": by + bh + 38,
+             "text": f"δ_tip = {round(float(delta_tip),2)} mm", "color": "#3b82f6"},
+        ],
+    }
+
+    observations = [
+        f"Cantilever beam span = {L} m under uniform distributed load w = {w} kN/m",
+        f"Fixed support reaction at root (x=0): Vertical Shear R = {round(R_fixed, 2)} kN, Fixing Moment M = {round(float(M_fixed), 2)} kN·m",
+        f"Maximum tip deflection at free end (x={L} m) δ_tip = {round(float(delta_tip), 3)} mm governed by Euler-Bernoulli quartic mechanics",
+        f"Deflection profile follows y(x) = (w*x^2)/(24*E*I) * (x^2 - 4*L*x + 6*L^2)",
+        f"Maximum bending stress at fixed root section = {round(float(sigma_max), 2)} MPa",
+    ]
+    return numerical, plots, visual_data, observations
+
+
 def _simply_supported_beam(params):
     """Simply supported beam under uniform distributed load (UDL)."""
     L       = params.get("span_m", 6.0)
@@ -535,7 +680,10 @@ def run(procedure: dict) -> dict:
         else:
             exp_type = "building_blueprint"
 
-    if exp_type in ("beam_analysis", "beam"):
+    if any(w in text for w in ["cantilever", "fixed beam", "fixed-free", "fixed free"]):
+        numerical, plots, visual_data, observations = _cantilever_beam(params)
+        log.append("[civil_sim] Cantilever beam analysis computed")
+    elif exp_type in ("beam_analysis", "beam"):
         numerical, plots, visual_data, observations = _simply_supported_beam(params)
         log.append("[civil_sim] Simply supported beam analysis computed")
     elif exp_type in ("truss_analysis", "truss"):

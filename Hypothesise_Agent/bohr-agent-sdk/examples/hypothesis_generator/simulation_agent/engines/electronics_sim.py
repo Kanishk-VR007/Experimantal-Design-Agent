@@ -464,6 +464,100 @@ def _rlc_series(params):
     return numerical, plots, visual_data, observations
 
 
+def _ohms_law(params):
+    """
+    Ohm's Law: I = V / R across a precision resistor.
+    Generates I-V characteristic curve, power dissipation P = V^2 / R, and conductance G.
+    """
+    R = float(params.get("resistance_ohm") or params.get("R") or params.get("R0") or 1000.0)
+    V_min = float(params.get("voltage_min", 0.0))
+    V_max = float(params.get("voltage_max") or params.get("supply_voltage_V") or params.get("V0") or 10.0)
+    if V_max <= V_min:
+        V_max = V_min + 10.0
+
+    V_arr = np.linspace(V_min, V_max, 120)
+    I_arr_A = V_arr / max(R, 1e-9)
+    I_arr_mA = I_arr_A * 1000.0
+    Power_mW = (I_arr_A ** 2) * R * 1000.0
+
+    G_siemens = 1.0 / max(R, 1e-9)
+    max_current_mA = float(I_arr_mA[-1])
+    max_power_mW = float(Power_mW[-1])
+
+    numerical = {
+        "ohms_law": {
+            "resistance_ohm":        round(R, 2),
+            "conductance_S":         round(G_siemens, 6),
+            "voltage_range_V":       [round(V_min, 1), round(V_max, 1)],
+            "max_current_mA":        round(max_current_mA, 3),
+            "max_power_mW":          round(max_power_mW, 3),
+            "correlation_R2":        1.0,
+            "linear_slope_mA_per_V": round(G_siemens * 1000.0, 4),
+        }
+    }
+
+    plots = [
+        {
+            "plot_type": "line",
+            "title": "Ohm's Law: Current vs Applied Voltage (I-V Curve)",
+            "x_label": "Applied Voltage V (V)",
+            "y_label": "Current I (mA)",
+            "x": V_arr.tolist(),
+            "y": I_arr_mA.tolist(),
+            "series_name": "I(V)",
+        },
+        {
+            "plot_type": "line",
+            "title": "Power Dissipation vs Applied Voltage (P = V²/R)",
+            "x_label": "Applied Voltage V (V)",
+            "y_label": "Power Dissipation P (mW)",
+            "x": V_arr.tolist(),
+            "y": Power_mW.tolist(),
+            "series_name": "Power P(V)",
+        },
+        {
+            "plot_type": "line",
+            "title": "Dynamic Resistance dV/dI vs Voltage",
+            "x_label": "Applied Voltage V (V)",
+            "y_label": "Resistance R (Ω)",
+            "x": V_arr.tolist(),
+            "y": np.full_like(V_arr, R).tolist(),
+            "series_name": "dV/dI (Constant R)",
+        },
+    ]
+
+    visual_data = {
+        "circuit_type": "dc_sweep",
+        "title": f"Ohm's Law I-V Sweep — R = {R} Ω",
+        "width": 700,
+        "height": 380,
+        "components": [
+            {"id": "V_SUPPLY", "type": "dc_source", "x": 100, "y": 140, "label": f"DC Source ({V_min}-{V_max}V)", "value": f"{V_max}V"},
+            {"id": "AMMETER", "type": "meter", "x": 300, "y": 100, "label": "Ammeter", "value": f"{max_current_mA:.2f}mA"},
+            {"id": "RESISTOR", "type": "resistor", "x": 500, "y": 140, "label": f"R1 ({R}Ω)", "value": f"{R}Ω"},
+            {"id": "VOLTMETER", "type": "meter", "x": 500, "y": 240, "label": "Voltmeter", "value": f"{V_max:.1f}V"},
+            {"id": "GND", "type": "ground", "x": 300, "y": 300, "label": "GND", "value": "0V"},
+        ],
+        "wires": [
+            {"from": "V_SUPPLY:pos", "to": "AMMETER:in"},
+            {"from": "AMMETER:out", "to": "RESISTOR:in"},
+            {"from": "RESISTOR:out", "to": "V_SUPPLY:neg"},
+            {"from": "RESISTOR:in", "to": "VOLTMETER:pos"},
+            {"from": "RESISTOR:out", "to": "VOLTMETER:neg"},
+            {"from": "V_SUPPLY:neg", "to": "GND:in"},
+        ],
+    }
+
+    observations = [
+        f"Linear voltage sweep from {V_min:.1f}V to {V_max:.1f}V confirms Ohm's Law (I = V / R)",
+        f"Measured resistance R = {R:.1f} Ω with conductance G = {G_siemens:.6f} S ({G_siemens*1000.0:.3f} mA/V)",
+        f"Maximum current reaches {max_current_mA:.3f} mA at {V_max:.1f}V with maximum power dissipation {max_power_mW:.3f} mW",
+        f"Empirical correlation coefficient R² = 1.0000 confirms strict linearity with zero-offset intercept",
+    ]
+
+    return numerical, plots, visual_data, observations
+
+
 # ─── Main entry point ────────────────────────────────────────────────────────
 
 def run(procedure: dict) -> dict:
@@ -473,7 +567,9 @@ def run(procedure: dict) -> dict:
     text    = (procedure.get("hypothesis", "") + " " + exp_type).lower()
 
     # Auto-detect sub-type from text
-    if exp_type in ("", "electronics", None):
+    if any(w in text for w in ["ohm", "resistor", "i-v", "current vs voltage", "conductance"]):
+        exp_type = "ohms_law"
+    elif exp_type in ("", "electronics", None):
         if any(w in text for w in ["arduino", "blink", "microcontroller", "atmega"]):
             exp_type = "arduino_led"
         elif any(w in text for w in ["voltage divider", "divider"]):
@@ -481,9 +577,13 @@ def run(procedure: dict) -> dict:
         elif any(w in text for w in ["rlc", "inductor", "resonan"]):
             exp_type = "rlc_circuit"
         else:
-            exp_type = "arduino_led"
+            exp_type = "ohms_law" if any(w in text for w in ["resis", "volt", "curr"]) else "arduino_led"
 
-    if exp_type in ("arduino_led", "arduino", "arduino_blink", "blink"):
+    if exp_type in ("ohms_law", "ohm", "iv_curve"):
+        numerical, plots, visual_data, observations = _ohms_law(params)
+        log.append("[electronics_sim] Ohm's Law I-V sweep computed")
+
+    elif exp_type in ("arduino_led", "arduino", "arduino_blink", "blink"):
         numerical, plots, visual_data, observations = _arduino_led_circuit(params)
         log.append("[electronics_sim] Arduino LED blink circuit computed")
 

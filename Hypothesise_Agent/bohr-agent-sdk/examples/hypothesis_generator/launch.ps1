@@ -90,13 +90,27 @@ Write-Host "====================================================================
 Write-Host ""
 
 # Start backend in background
-Write-Host "Starting backend server..."
+Write-Host "Starting backend server (port 8000)..."
+$pyPath = Join-Path $PWD ".venv\Scripts\python.exe"
+if (-not (Test-Path $pyPath)) { $pyPath = "python" }
+
 $backendJob = Start-Job -ScriptBlock {
-    Set-Location $using:PWD
-    Set-Location backend
-    python server.py
-}
+    param($py, $dir)
+    $env:PYTHONPATH = $dir
+    Set-Location $dir
+    & $py -m uvicorn backend.server:app --port 8000 --host 0.0.0.0
+} -ArgumentList $pyPath, $PWD
 Start-Sleep -Seconds 3
+
+# Start memory agent in background
+Write-Host "Starting memory agent (port 8001)..."
+$memJob = Start-Job -ScriptBlock {
+    param($py, $dir)
+    $env:PYTHONPATH = $dir
+    Set-Location $dir
+    & $py -m uvicorn memory_agent.main:app --port 8001 --host 0.0.0.0
+} -ArgumentList $pyPath, $PWD
+Start-Sleep -Seconds 2
 
 # Check if backend started
 if ($backendJob.State -ne "Running") {
@@ -162,8 +176,8 @@ try {
 } finally {
     Write-Host ""
     Write-Host "🛑 Stopping servers..."
-    Stop-Job $backendJob, $frontendJob -ErrorAction SilentlyContinue
-    Remove-Job $backendJob, $frontendJob -ErrorAction SilentlyContinue
+    Stop-Job $backendJob, $frontendJob, $memJob -ErrorAction SilentlyContinue
+    Remove-Job $backendJob, $frontendJob, $memJob -ErrorAction SilentlyContinue
     Write-Host "✅ Servers stopped"
     Write-Host ""
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './SimulationRunner.css'
 
-function SimulationRunner({ topic, design, onSimulationComplete, onClose }) {
+function SimulationRunner({ topic, design, domain, onSimulationComplete, onClose }) {
   const [status, setStatus] = useState('initializing') // initializing, running, success, error
   const [progress, setProgress] = useState(0)
   const [logs, setLogs] = useState([])
@@ -39,7 +39,7 @@ function SimulationRunner({ topic, design, onSimulationComplete, onClose }) {
         body: JSON.stringify({
           topic: topic,
           design: design,
-          domain: null  // Auto-detect from design
+          domain: domain || null
         })
       })
 

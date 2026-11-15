@@ -62,3 +62,4 @@ class SimulationOutput(BaseModel):
     simulation_log: List[str]            # Step-by-step trace for audit
     visualization_type: str = "graph"   # "graph" | "circuit" | "architecture"
     visual_data: Optional[Dict[str, Any]] = None  # Circuit/architecture layout for interactive rendering
+    visualization_spec: Optional[Dict[str, Any]] = None  # Validated declarative 3D scene specification

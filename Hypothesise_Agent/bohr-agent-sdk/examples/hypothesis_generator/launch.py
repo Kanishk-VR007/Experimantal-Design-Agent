@@ -17,6 +17,8 @@ ROOT_DIR = Path(__file__).parent
 BACKEND_DIR = ROOT_DIR / "backend"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 MEMORY_AGENT_DIR = ROOT_DIR / "memory_agent"
+VENV_PY = ROOT_DIR / ".venv" / "Scripts" / "python.exe"
+PYTHON_EXE = str(VENV_PY) if VENV_PY.exists() else sys.executable
 
 processes = []
 
@@ -123,13 +125,14 @@ def start_backend():
     print("Starting FastAPI server on http://localhost:8000")
     
     try:
-        # Set UTF-8 encoding for Windows compatibility
+        # Set UTF-8 encoding and PYTHONPATH for Windows compatibility
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
+        env['PYTHONPATH'] = str(ROOT_DIR)
         
         proc = subprocess.Popen(
-            [sys.executable, "server.py"],
-            cwd=BACKEND_DIR,
+            [PYTHON_EXE, "-m", "uvicorn", "backend.server:app", "--port", "8000", "--host", "0.0.0.0"],
+            cwd=ROOT_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -163,13 +166,14 @@ def start_memory_agent():
     print("Starting Memory Agent on http://localhost:8001")
     
     try:
-        # Set UTF-8 encoding for Windows compatibility
+        # Set UTF-8 encoding and PYTHONPATH for Windows compatibility
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
+        env['PYTHONPATH'] = str(ROOT_DIR)
         
         proc = subprocess.Popen(
-            [sys.executable, "main.py"],
-            cwd=MEMORY_AGENT_DIR,
+            [PYTHON_EXE, "-m", "uvicorn", "memory_agent.main:app", "--port", "8001", "--host", "0.0.0.0"],
+            cwd=ROOT_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
