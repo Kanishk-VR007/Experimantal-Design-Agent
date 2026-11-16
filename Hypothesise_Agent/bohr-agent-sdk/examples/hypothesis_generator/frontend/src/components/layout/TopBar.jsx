@@ -50,8 +50,8 @@ function TopBar({ status, onRefreshHealth }) {
       {/* Right: Health + Controls */}
       <div className="topbar-right">
         <div className="topbar-health">
-          <HealthDot label="Backend" healthy={status?.healthy} />
-          <HealthDot label="LLM" healthy={status?.ollamaAvailable} />
+          <HealthDot label="Backend" healthy={Boolean(status?.backendHealthy ?? status?.healthy)} />
+          <HealthDot label="LLM" healthy={Boolean(status?.llmHealthy ?? status?.ollamaAvailable)} />
           <HealthDot label="Memory" healthy={!status?.error} />
           <button
             className="topbar-icon-btn"

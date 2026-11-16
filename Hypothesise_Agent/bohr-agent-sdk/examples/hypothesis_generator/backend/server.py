@@ -91,6 +91,7 @@ class VisualizationUpdateRequest(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    backend_healthy: bool = True
     ollama_available: bool
     llm_available: bool = False
     provider: str = "lmstudio"
@@ -303,6 +304,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse)
+@app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """Check API, LM Studio generator, and LM Studio Qwen refiner health"""
     llm_status = check_llm_health()
@@ -310,6 +312,7 @@ async def health_check():
 
     return {
         "status": "healthy" if llm_status["available"] else "llm_unavailable",
+        "backend_healthy": True,
         "ollama_available": llm_status["available"],
         "llm_available": llm_status["available"],
         "provider": llm_status.get("provider", "lmstudio"),

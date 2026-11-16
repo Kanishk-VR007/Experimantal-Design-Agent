@@ -12,11 +12,17 @@ export const MEMORY_API_BASE = 'http://localhost:8001'
 export async function fetchHealth() {
   try {
     const response = await fetch(`${API_BASE}/health`)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
     const data = await response.json()
+    const isLlmHealthy = data.status === 'healthy' || Boolean(data.llm_available || data.ollama_available)
     return {
       loading: false,
-      healthy: data.status === 'healthy',
-      ollamaAvailable: data.llm_available ?? data.ollama_available,
+      healthy: true,
+      backendHealthy: true,
+      ollamaAvailable: isLlmHealthy,
+      llmHealthy: isLlmHealthy,
       provider: data.provider || 'lmstudio',
       activeModel: data.active_model || (data.models && data.models[0]) || '',
       refinerAvailable: Boolean(data.refiner_available),
@@ -28,6 +34,9 @@ export async function fetchHealth() {
     return {
       loading: false,
       healthy: false,
+      backendHealthy: false,
+      ollamaAvailable: false,
+      llmHealthy: false,
       error: 'Cannot connect to backend server',
     }
   }
