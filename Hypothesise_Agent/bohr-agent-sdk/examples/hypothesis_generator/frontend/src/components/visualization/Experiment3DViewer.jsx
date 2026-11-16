@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { Maximize, Minimize, Maximize2, Minimize2 } from 'lucide-react'
 import { validateSceneSpecification } from '../../visualization/sceneSchema'
 import { AnimationController } from '../../visualization/animationController'
 import { getTemplateMeta } from '../../visualization/sceneRegistry'
@@ -16,6 +17,8 @@ export function Experiment3DViewer({
   topic,
   procedure,
   onSimulationUpdated,
+  isExpanded,
+  onToggleExpand,
 }) {
   // Validate specification
   const validationResult = useMemo(
@@ -43,7 +46,23 @@ export function Experiment3DViewer({
   const [showAxes, setShowAxes] = useState(true)
   const [showVectors, setShowVectors] = useState(true)
   const [resetCameraTrigger, setResetCameraTrigger] = useState(0)
+  const [zoomTrigger, setZoomTrigger] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const [showParamsInViewer, setShowParamsInViewer] = useState(false)
+
+  const effectiveExpanded = isExpanded !== undefined ? isExpanded : internalExpanded
+
+  const handleToggleExpand = () => {
+    if (onToggleExpand) {
+      onToggleExpand(!effectiveExpanded)
+    } else {
+      setInternalExpanded((prev) => !prev)
+    }
+  }
+
+  const handleZoomIn = () => setZoomTrigger((prev) => (prev > 0 ? prev + 1 : 1))
+  const handleZoomOut = () => setZoomTrigger((prev) => (prev < 0 ? prev - 1 : -1))
 
   // Object picking & tooltips
   const [hoveredObject, setHoveredObject] = useState(null)
@@ -209,7 +228,7 @@ export function Experiment3DViewer({
   return (
     <div
       ref={containerRef}
-      className={`experiment-3d-viewer-container ${isFullscreen ? 'is-fullscreen' : ''}`}
+      className={`experiment-3d-viewer-container ${isFullscreen ? 'is-fullscreen' : ''} ${effectiveExpanded ? 'is-expanded' : ''}`}
     >
       {/* Top Header Bar */}
       <div className="vis-top-bar">
@@ -219,6 +238,51 @@ export function Experiment3DViewer({
             <h3 className="vis-title-text">{spec.title || '3D Scientific Experiment Simulation'}</h3>
             <span className="vis-template-tag">{spec.scene_template}</span>
           </div>
+        </div>
+        <div className="vis-top-bar-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className="vis-header-action-btn"
+            onClick={handleToggleExpand}
+            title={effectiveExpanded ? "Minimize Studio View" : "Expand 3D Studio (Maximize Inspection Viewport)"}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              background: effectiveExpanded ? 'rgba(56, 189, 248, 0.2)' : 'rgba(30, 41, 59, 0.8)',
+              border: effectiveExpanded ? '1px solid #38bdf8' : '1px solid #475569',
+              borderRadius: '6px',
+              color: effectiveExpanded ? '#38bdf8' : '#f1f5f9',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {effectiveExpanded ? <Minimize size={13} /> : <Maximize size={13} />}
+            <span>{effectiveExpanded ? 'Standard View' : 'Expand 3D Studio'}</span>
+          </button>
+          <button
+            type="button"
+            className="vis-header-action-btn"
+            onClick={handleToggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "True Fullscreen Mode"}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 10px',
+              background: 'rgba(30, 41, 59, 0.8)',
+              border: '1px solid #475569',
+              borderRadius: '6px',
+              color: '#94a3b8',
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+            }}
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
         </div>
       </div>
 
@@ -232,6 +296,7 @@ export function Experiment3DViewer({
           showAxes={showAxes}
           showVectors={showVectors}
           resetCameraTrigger={resetCameraTrigger}
+          zoomTrigger={zoomTrigger}
           onObjectHover={setHoveredObject}
           onObjectClick={(obj) => setSelectedObjectId(obj?.id || null)}
           selectedObjectId={selectedObjectId}
@@ -253,12 +318,16 @@ export function Experiment3DViewer({
           showAxes={showAxes}
           showVectors={showVectors}
           isFullscreen={isFullscreen}
+          isExpanded={effectiveExpanded}
           hasVectors={Boolean(spec.vectors && spec.vectors.length > 0)}
           onToggleGrid={() => setShowGrid((p) => !p)}
           onToggleAxes={() => setShowAxes((p) => !p)}
           onToggleVectors={() => setShowVectors((p) => !p)}
           onResetCamera={handleResetCamera}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
           onToggleFullscreen={handleToggleFullscreen}
+          onToggleExpand={handleToggleExpand}
         />
       </div>
 
@@ -279,13 +348,35 @@ export function Experiment3DViewer({
         />
       )}
 
-      {/* Live Physical Parameter Controls */}
+      {/* Live Physical Parameter Controls - Collapsible to prevent squeezing 3D canvas */}
       {spec.parameters && spec.parameters.length > 0 && (
-        <ParameterControls
-          parameters={spec.parameters}
-          onUpdateParameters={handleUpdateParameters}
-          isUpdating={isUpdatingParams}
-        />
+        <div className="vis-inline-parameters-container">
+          <div style={{ padding: '6px 12px', background: 'rgba(15, 23, 42, 0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setShowParamsInViewer((p) => !p)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span>{showParamsInViewer ? 'Hide Inline Parameters ▴' : 'Show Inline Parameters ▾'}</span>
+            </button>
+          </div>
+          {showParamsInViewer && (
+            <ParameterControls
+              parameters={spec.parameters}
+              onUpdateParameters={handleUpdateParameters}
+              isUpdating={isUpdatingParams}
+            />
+          )}
+        </div>
       )}
     </div>
   )

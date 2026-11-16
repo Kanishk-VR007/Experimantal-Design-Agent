@@ -22,7 +22,13 @@ const STAGE_DEFINITIONS = [
   { id: 'complete', label: '9. 3D WebGL Visualization', model: 'React Three Fiber', icon: CheckCircle2 },
 ]
 
-export default function MultiModelPipelinePanel({ topic, domain, onPipelineComplete }) {
+export default function MultiModelPipelinePanel({
+  topic,
+  domain,
+  onPipelineComplete,
+  compact = false,
+  onToggleCompact,
+}) {
   const [isRunning, setIsRunning] = useState(false)
   const [customRefUrl, setCustomRefUrl] = useState('')
   const [currentStageId, setCurrentStageId] = useState('')
@@ -32,6 +38,12 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
   const [pipelineResult, setPipelineResult] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
   const [expanded, setExpanded] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(compact)
+
+  // Sync internal minimized state with prop
+  useEffect(() => {
+    setIsMinimized(compact)
+  }, [compact])
 
   // Poll model telemetry on mount and when running
   useEffect(() => {
@@ -138,6 +150,94 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
   const selectedRef = pipelineResult?.selected_reference
   const visualInstr = pipelineResult?.visual_reconstruction_instructions
 
+  if (isMinimized) {
+    return (
+      <div
+        className="multi-model-pipeline-card is-compact"
+        style={{
+          background: 'linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          borderRadius: '8px',
+          padding: '6px 14px',
+          marginBottom: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={16} color="#c084fc" />
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f8fafc' }}>
+            3-Model Vision Pipeline:
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#94a3b8' }}>
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: modelTelemetry?.status === 'online' ? '#22c55e' : '#ef4444',
+                display: 'inline-block',
+              }}
+            />
+            {activeModelDisplay()}
+          </span>
+          {currentStageId && currentStageId !== 'complete' && (
+            <span style={{ fontSize: '0.72rem', color: '#a78bfa', marginLeft: '6px' }}>
+              • {currentStageId.replace(/_/g, ' ')}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            onClick={handleStartPipeline}
+            disabled={isRunning}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              background: isRunning ? 'rgba(100, 116, 139, 0.4)' : 'linear-gradient(135deg, #7c3aed, #2563eb)',
+              border: '1px solid #8b5cf6',
+              borderRadius: '6px',
+              color: '#ffffff',
+              fontSize: '0.74rem',
+              fontWeight: 600,
+              cursor: isRunning ? 'wait' : 'pointer',
+            }}
+          >
+            {isRunning ? <RefreshCw size={12} className="spinner-rotate" /> : <Zap size={12} />}
+            <span>{isRunning ? 'Sequencing...' : 'Run Pipeline'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsMinimized(false)
+              if (onToggleCompact) onToggleCompact(false)
+            }}
+            style={{
+              padding: '4px 8px',
+              background: 'rgba(51, 65, 85, 0.5)',
+              border: '1px solid rgba(100, 116, 139, 0.4)',
+              borderRadius: '6px',
+              color: '#cbd5e1',
+              fontSize: '0.72rem',
+              cursor: 'pointer',
+            }}
+            title="Expand Full Pipeline Monitor"
+          >
+            Expand Panel ▾
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="multi-model-pipeline-card"
@@ -145,8 +245,8 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
         background: 'linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
         border: '1px solid rgba(139, 92, 246, 0.4)',
         borderRadius: '12px',
-        padding: '16px 20px',
-        marginBottom: '20px',
+        padding: '12px 18px',
+        marginBottom: '12px',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
       }}
     >
@@ -155,8 +255,8 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
+              width: '32px',
+              height: '32px',
               borderRadius: '8px',
               background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
               display: 'flex',
@@ -164,13 +264,13 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
               justifyContent: 'center',
             }}
           >
-            <Sparkles size={20} color="#fff" />
+            <Sparkles size={18} color="#fff" />
           </div>
           <div>
-            <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 600, color: '#f8fafc' }}>
+            <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 600, color: '#f8fafc' }}>
               Multi-Model Vision-Assisted 3D Pipeline
             </h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px', fontSize: '0.75rem', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px', fontSize: '0.73rem', color: '#94a3b8' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span
                   style={{
@@ -196,16 +296,35 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
             type="button"
             onClick={() => setExpanded(!expanded)}
             style={{
-              padding: '6px 12px',
+              padding: '5px 10px',
               background: 'rgba(51, 65, 85, 0.6)',
               border: '1px solid rgba(100, 116, 139, 0.4)',
               borderRadius: '6px',
               color: '#cbd5e1',
-              fontSize: '0.8rem',
+              fontSize: '0.78rem',
               cursor: 'pointer',
             }}
           >
-            {expanded ? 'Hide Pipeline' : 'Inspect Pipeline'}
+            {expanded ? 'Hide Details' : 'Inspect Pipeline'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsMinimized(true)
+              if (onToggleCompact) onToggleCompact(true)
+            }}
+            style={{
+              padding: '5px 8px',
+              background: 'rgba(51, 65, 85, 0.6)',
+              border: '1px solid rgba(100, 116, 139, 0.4)',
+              borderRadius: '6px',
+              color: '#94a3b8',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+            }}
+            title="Minimize to Compact Bar"
+          >
+            Minimize ▴
           </button>
           <button
             type="button"
@@ -424,3 +543,4 @@ export default function MultiModelPipelinePanel({ topic, domain, onPipelineCompl
     </div>
   )
 }
+

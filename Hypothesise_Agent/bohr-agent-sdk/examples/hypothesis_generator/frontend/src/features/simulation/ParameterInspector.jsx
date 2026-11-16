@@ -29,12 +29,18 @@ function ParameterInspector({ simulation, onSimulationUpdated }) {
         voltage_max_v: 12,
         voltage_min_v: 0
       })
-    } else if (domain === 'biology' || simulation?.type === 'enzyme_kinetics') {
+    } else if (domain === 'mechanical' || simulation?.type === 'spur_gears') {
       setParams({
-        vmax: 50.0,
-        km: 5.0,
-        substrate_max_mm: 50.0,
-        inhibitor_conc_mm: 0.0
+        driver_teeth: 20,
+        driven_teeth: 60,
+        input_rpm: 1800,
+        input_torque_nm: 25.0
+      })
+    } else if (domain === 'cs' || domain === 'computer_science') {
+      setParams({
+        nodes_count: 16,
+        edge_probability: 0.35,
+        execution_speed_ms: 120
       })
     } else {
       setParams({

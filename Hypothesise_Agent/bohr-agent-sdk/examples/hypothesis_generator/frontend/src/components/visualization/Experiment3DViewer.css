@@ -7,10 +7,17 @@
   border: 1px solid #334155;
   border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 2rem;
+  margin-bottom: 0.5rem;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   position: relative;
   transition: all 0.2s ease-in-out;
+  width: 100%;
+  flex: 1;
+}
+
+.experiment-3d-viewer-container.is-expanded {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
 }
 
 .experiment-3d-viewer-container.is-fullscreen {
@@ -29,9 +36,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1.25rem;
+  padding: 0.6rem 1.25rem;
   background: #1e293b;
   border-bottom: 1px solid #334155;
+  flex-shrink: 0;
 }
 
 .vis-title-group {
@@ -41,21 +49,21 @@
 }
 
 .vis-title-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
 }
 
 .vis-title-text {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: #f8fafc;
   margin: 0;
 }
 
 .vis-template-tag {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: #94a3b8;
   background: #0f172a;
-  padding: 0.2rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 4px;
   border: 1px solid #334155;
 }
@@ -64,14 +72,23 @@
 .vis-viewport-area {
   position: relative;
   width: 100%;
-  height: 480px;
-  min-height: 400px;
+  height: 100%;
+  min-height: 520px;
+  flex: 1;
   background: #0b0f19;
+  display: flex;
+  flex-direction: column;
+}
+
+.experiment-3d-viewer-container.is-expanded .vis-viewport-area {
+  min-height: calc(100vh - 220px);
+  height: calc(100vh - 220px);
 }
 
 .experiment-3d-viewer-container.is-fullscreen .vis-viewport-area {
   flex: 1;
-  height: calc(100vh - 180px);
+  height: calc(100vh - 75px);
+  min-height: calc(100vh - 75px);
 }
 
 /* HUD Overlay */

@@ -12,6 +12,7 @@ export function ExperimentScene({
   showAxes = true,
   showVectors = true,
   resetCameraTrigger = 0,
+  zoomTrigger = 0,
   onObjectHover,
   onObjectClick,
   selectedObjectId,
@@ -49,6 +50,7 @@ export function ExperimentScene({
         <CameraController
           target={camTarget}
           resetTrigger={resetCameraTrigger}
+          zoomTrigger={zoomTrigger}
           allowOrbit={controls.allow_orbit ?? true}
           allowPan={controls.allow_pan ?? true}
           allowZoom={controls.allow_zoom ?? true}

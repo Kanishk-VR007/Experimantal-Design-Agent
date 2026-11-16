@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import {
   Atom, BarChart3, Box, Sliders, Maximize2, Minimize2,
-  CheckCircle2, AlertCircle, Info, RefreshCw
+  CheckCircle2, AlertCircle, Info, RefreshCw, Maximize, Minimize,
+  ChevronDown, ChevronUp
 } from 'lucide-react'
 import Experiment3DViewer from '../../components/visualization/Experiment3DViewer'
 import BlueprintVisualizer from '../../components/BlueprintVisualizer'
@@ -18,6 +19,9 @@ import { useExperimentStore } from '../../stores/experimentStore'
 function SimulationWorkspace({ simulation, onSimulationUpdated }) {
   const [activeTab, setActiveTab] = useState('split') // 'split' | '3d' | '2d' | 'schematic'
   const [fullscreen, setFullscreen] = useState(false)
+  const [isExpanded3D, setIsExpanded3D] = useState(false)
+  const [showDrawer, setShowDrawer] = useState(true)
+  const [showBottomPanels, setShowBottomPanels] = useState(false)
   const [loadingBenchmark, setLoadingBenchmark] = useState(false)
 
   const handlePipelineComplete = (result) => {
@@ -238,7 +242,10 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
             type="button"
             data-tab="split"
             className={`tab-btn ${activeTab === 'split' ? 'active' : ''}`}
-            onClick={() => setActiveTab('split')}
+            onClick={() => {
+              setActiveTab('split')
+              setIsExpanded3D(false)
+            }}
           >
             Split View
           </button>
@@ -254,7 +261,10 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
             type="button"
             data-tab="2d"
             className={`tab-btn ${activeTab === '2d' ? 'active' : ''}`}
-            onClick={() => setActiveTab('2d')}
+            onClick={() => {
+              setActiveTab('2d')
+              setIsExpanded3D(false)
+            }}
           >
             2D Response Curves
           </button>
@@ -263,11 +273,52 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
               type="button"
               data-tab="schematic"
               className={`tab-btn ${activeTab === 'schematic' ? 'active' : ''}`}
-              onClick={() => setActiveTab('schematic')}
+              onClick={() => {
+                setActiveTab('schematic')
+                setIsExpanded3D(false)
+              }}
             >
               Domain Schematic
             </button>
           )}
+
+          {/* Quick Expand Toggle for 3D Studio */}
+          {activeTab === '3d' && (
+            <button
+              type="button"
+              className={`tab-btn expand-tab-btn ${isExpanded3D ? 'active' : ''}`}
+              onClick={() => setIsExpanded3D((p) => !p)}
+              title={isExpanded3D ? 'Restore Standard Height' : 'Expand 3D Studio to Full Screen Height'}
+              style={{
+                color: isExpanded3D ? '#00f0ff' : '#94a3b8',
+                borderColor: isExpanded3D ? 'rgba(0, 240, 255, 0.4)' : undefined,
+                background: isExpanded3D ? 'rgba(0, 240, 255, 0.12)' : undefined,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              {isExpanded3D ? <Minimize size={13} /> : <Maximize size={13} />}
+              <span>{isExpanded3D ? 'Standard Height' : 'Expand 3D View'}</span>
+            </button>
+          )}
+
+          {/* Sidebar Drawer Toggle Button */}
+          <button
+            type="button"
+            className={`tab-btn drawer-toggle-btn ${!showDrawer ? 'active' : ''}`}
+            onClick={() => setShowDrawer((p) => !p)}
+            title={showDrawer ? 'Hide Parameter Drawer (Wider 3D View)' : 'Show Parameter Drawer'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}
+          >
+            <Sliders size={13} />
+            <span>{showDrawer ? 'Hide Drawer' : 'Show Drawer'}</span>
+          </button>
+
           <button
             type="button"
             className="btn-icon-fullscreen"
@@ -285,6 +336,7 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
           <MultiModelPipelinePanel
             topic={hypothesis || useExperimentStore.getState().topic}
             domain={domain}
+            compact={activeTab === '3d' || isExpanded3D}
             onPipelineComplete={handlePipelineComplete}
           />
 
@@ -301,6 +353,11 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
                     visualizationSpec={visualization_spec}
                     domain={domain}
                     simulationId={simulation.simulation_id}
+                    isExpanded={false}
+                    onToggleExpand={() => {
+                      setActiveTab('3d')
+                      setIsExpanded3D(true)
+                    }}
                   />
                 </div>
               </div>
@@ -325,11 +382,13 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
 
           {/* 3D Only Mode */}
           {activeTab === '3d' && (
-            <div className="fullscreen-3d-box">
+            <div className={`fullscreen-3d-box ${isExpanded3D ? 'is-expanded' : ''}`}>
               <Experiment3DViewer
                 visualizationSpec={visualization_spec}
                 domain={domain}
                 simulationId={simulation.simulation_id}
+                isExpanded={isExpanded3D}
+                onToggleExpand={() => setIsExpanded3D((p) => !p)}
               />
             </div>
           )}
@@ -354,7 +413,26 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
         </div>
 
         {/* Right Sidebar: Physical Parameter Controls */}
-        <div className="workspace-parameter-drawer">
+        <div className={`workspace-parameter-drawer ${!showDrawer ? 'is-collapsed' : ''}`}>
+          <div className="drawer-close-bar" style={{ padding: '6px 12px', display: 'flex', justifyContent: 'flex-end', borderBottom: '1px solid var(--border)' }}>
+            <button
+              type="button"
+              onClick={() => setShowDrawer(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                fontSize: '0.72rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Collapse Drawer for Maximum Canvas Width"
+            >
+              <span>Collapse Sidebar ✕</span>
+            </button>
+          </div>
           <ParameterInspector
             simulation={simulation}
             onSimulationUpdated={onSimulationUpdated}
@@ -362,50 +440,79 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
         </div>
       </div>
 
-      {/* Numerical Metrics Summary Bar */}
-      {numerical_results && Object.keys(numerical_results).length > 0 && (
-        <div className="numerical-metrics-summary-bar">
-          <div className="metrics-label">
-            <CheckCircle2 size={14} color="var(--accent-success)" />
-            <span>Numerical Metrics:</span>
-          </div>
-          <div className="metrics-cards-row">
-            {Object.entries(numerical_results).flatMap(([k, val]) => {
-              if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-                return Object.entries(val).map(([subK, subVal]) => (
-                  <div key={`${k}-${subK}`} className="metric-tag-chip">
-                    <span className="metric-k">{subK.replace(/_/g, ' ')}:</span>
-                    <span className="metric-v">
-                      {typeof subVal === 'number' ? (Number.isInteger(subVal) ? subVal : subVal.toFixed(4)) : String(subVal)}
-                    </span>
-                  </div>
-                ))
-              }
-              return (
-                <div key={k} className="metric-tag-chip">
-                  <span className="metric-k">{k.replace(/_/g, ' ')}:</span>
-                  <span className="metric-v">
-                    {typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : String(val)}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+      {/* Collapsible Ribbon for Metrics & Solver Observations */}
+      {((numerical_results && Object.keys(numerical_results).length > 0) || (observations && observations.length > 0)) && (
+        <div className="bottom-panels-toggle-bar">
+          <button
+            type="button"
+            className="bottom-panels-toggle-btn"
+            onClick={() => setShowBottomPanels((p) => !p)}
+            title="Toggle visibility of metrics and solver observations"
+          >
+            {showBottomPanels ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <ChevronDown size={13} />
+                Hide Numerical Metrics &amp; Observations Panel ▾
+              </span>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <ChevronUp size={13} />
+                Show Numerical Metrics &amp; Solver Observations ({Object.keys(numerical_results || {}).length} metrics) ▴
+              </span>
+            )}
+          </button>
         </div>
       )}
 
-      {/* Observations Box */}
-      {observations && observations.length > 0 && (
-        <div className="observations-banner">
-          <Info size={16} color="var(--accent-secondary)" />
-          <div className="obs-content">
-            <span className="obs-title">Empirical Solver Observations:</span>
-            <ul className="obs-list">
-              {observations.map((obs, i) => (
-                <li key={i}>{obs}</li>
-              ))}
-            </ul>
-          </div>
+      {/* Collapsible Content Area */}
+      {showBottomPanels && (
+        <div className="workspace-bottom-details-group">
+          {/* Numerical Metrics Summary Bar */}
+          {numerical_results && Object.keys(numerical_results).length > 0 && (
+            <div className="numerical-metrics-summary-bar">
+              <div className="metrics-label">
+                <CheckCircle2 size={14} color="var(--accent-success)" />
+                <span>Numerical Metrics:</span>
+              </div>
+              <div className="metrics-cards-row">
+                {Object.entries(numerical_results).flatMap(([k, val]) => {
+                  if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+                    return Object.entries(val).map(([subK, subVal]) => (
+                      <div key={`${k}-${subK}`} className="metric-tag-chip">
+                        <span className="metric-k">{subK.replace(/_/g, ' ')}:</span>
+                        <span className="metric-v">
+                          {typeof subVal === 'number' ? (Number.isInteger(subVal) ? subVal : subVal.toFixed(4)) : String(subVal)}
+                        </span>
+                      </div>
+                    ))
+                  }
+                  return (
+                    <div key={k} className="metric-tag-chip">
+                      <span className="metric-k">{k.replace(/_/g, ' ')}:</span>
+                      <span className="metric-v">
+                        {typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : String(val)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Observations Box */}
+          {observations && observations.length > 0 && (
+            <div className="observations-banner">
+              <Info size={16} color="var(--accent-secondary)" />
+              <div className="obs-content">
+                <span className="obs-title">Empirical Solver Observations:</span>
+                <ul className="obs-list">
+                  {observations.map((obs, i) => (
+                    <li key={i}>{obs}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
