@@ -45,10 +45,17 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app = FastAPI(title="Experimental Design Agent API")
 
-# Enable CORS for React frontend
+# Enable CORS for React frontend (both localhost and 127.0.0.1 on any local dev port)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3001", "http://127.0.0.1:3001",
+        "http://localhost:3002", "http://127.0.0.1:3002",
+        "http://localhost:3003", "http://127.0.0.1:3003",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -306,9 +313,11 @@ async def root():
 @app.get("/health", response_model=HealthResponse)
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
-    """Check API, LM Studio generator, and LM Studio Qwen refiner health"""
-    llm_status = check_llm_health()
-    refiner_status = check_refiner_status()
+    """Check API, LM Studio generator, and LM Studio Qwen refiner health without blocking the event loop."""
+    llm_status, refiner_status = await asyncio.gather(
+        asyncio.to_thread(check_llm_health),
+        asyncio.to_thread(check_refiner_status),
+    )
 
     return {
         "status": "healthy" if llm_status["available"] else "llm_unavailable",
@@ -515,8 +524,8 @@ async def run_simulation_endpoint(request: SimulationRequest):
             "refinement": request.refinement,
         }
         
-        # Run simulation
-        result = run_simulation(simulation_input)
+        # Run simulation off the main event loop so /health stays responsive
+        result = await asyncio.to_thread(run_simulation, simulation_input)
         
         # Save simulation output
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -590,11 +599,12 @@ async def update_visualization_endpoint(request: VisualizationUpdateRequest):
         proc["domain"] = request.domain
         proc["experiment_type"] = normalized_exp_type
 
-        # Run authoritative deterministic engine
-        raw = route(proc)
+        # Run authoritative deterministic engine off the event loop
+        def _solve_and_format():
+            raw_res = route(proc)
+            return format_output(raw_res, proc)
 
-        # Format output and generate synchronized 3D specification
-        output = format_output(raw, proc)
+        output = await asyncio.to_thread(_solve_and_format)
 
         return {
             "success": True,

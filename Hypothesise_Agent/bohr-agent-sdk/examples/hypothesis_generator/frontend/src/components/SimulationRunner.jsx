@@ -31,7 +31,7 @@ function SimulationRunner({ topic, design, domain, onSimulationComplete, onClose
       addLog('🔍 Detecting domain and experiment type...', 'info')
       setProgress(40)
 
-      const response = await fetch('http://localhost:8000/api/run-simulation', {
+      const response = await fetch('/api/run-simulation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

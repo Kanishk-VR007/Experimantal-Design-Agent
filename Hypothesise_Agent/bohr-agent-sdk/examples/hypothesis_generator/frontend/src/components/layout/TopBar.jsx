@@ -52,7 +52,7 @@ function TopBar({ status, onRefreshHealth }) {
         <div className="topbar-health">
           <HealthDot label="Backend" healthy={Boolean(status?.backendHealthy ?? status?.healthy)} />
           <HealthDot label="LLM" healthy={Boolean(status?.llmHealthy ?? status?.ollamaAvailable)} />
-          <HealthDot label="Memory" healthy={!status?.error} />
+          <HealthDot label="Memory" healthy={Boolean(status?.memoryHealthy)} />
           <button
             className="topbar-icon-btn"
             onClick={onRefreshHealth}

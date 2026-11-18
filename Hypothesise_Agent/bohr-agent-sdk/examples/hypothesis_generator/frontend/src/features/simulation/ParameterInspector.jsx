@@ -9,45 +9,59 @@ function ParameterInspector({ simulation, onSimulationUpdated }) {
   const [applied, setApplied] = useState(false)
 
   const domain = simulation?.domain || 'physics'
-  const simulationId = simulation?.simulation_id || 'sim_default'
+  const experimentId =
+    simulation?.experiment_id ||
+    simulation?.visualization_spec?.experiment_id ||
+    simulation?.simulation_id ||
+    'pendulum'
 
-  // Extract initial parameters based on domain and simulation results
+  // Extract initial parameters from the actual validated 3D scene specification first
   useEffect(() => {
-    if (simulation?.parameters) {
+    const specParams = simulation?.visualization_spec?.parameters
+    if (Array.isArray(specParams) && specParams.length > 0) {
+      const extracted = {}
+      for (const p of specParams) {
+        if (p?.name && typeof p.value === 'number') {
+          extracted[p.name] = p.value
+        }
+      }
+      if (Object.keys(extracted).length > 0) {
+        setParams(extracted)
+        return
+      }
+    }
+    if (simulation?.parameters && Object.keys(simulation.parameters).length > 0) {
       setParams(simulation.parameters)
-    } else if (domain === 'civil' || simulation?.type === 'cantilever_beam') {
+    } else if (domain.startsWith('civil')) {
       setParams({
-        length_m: 4.0,
-        load_kn: 20.0,
-        youngs_modulus_gpa: 200.0,
-        width_m: 0.2,
-        height_m: 0.4
+        span_m: 5.0,
+        point_load_kN: 10.0,
+        elastic_modulus_GPa: 200.0,
       })
-    } else if (domain === 'electronics' || simulation?.type === 'ohms_law') {
+    } else if (domain === 'electronics') {
       setParams({
-        resistance_ohms: 100,
-        voltage_max_v: 12,
-        voltage_min_v: 0
+        resistance_ohm: 10.0,
+        inductance_H: 0.1,
+        capacitance_F: 0.001,
+        voltage_V: 5.0,
       })
-    } else if (domain === 'mechanical' || simulation?.type === 'spur_gears') {
+    } else if (domain.startsWith('mech')) {
       setParams({
-        driver_teeth: 20,
-        driven_teeth: 60,
-        input_rpm: 1800,
-        input_torque_nm: 25.0
+        crank_length: 1.0,
+        coupler_length: 2.5,
+        rocker_length: 2.0,
+        ground_length: 3.0,
       })
     } else if (domain === 'cs' || domain === 'computer_science') {
       setParams({
-        nodes_count: 16,
-        edge_probability: 0.35,
-        execution_speed_ms: 120
+        epochs: 50,
       })
     } else {
       setParams({
         length_m: 1.5,
-        mass_kg: 0.5,
-        angle_deg: 30,
-        damping: 0.05
+        bob_mass_kg: 0.5,
+        angle_rad: 0.5,
+        damping: 0.05,
       })
     }
   }, [simulation, domain])
@@ -61,6 +75,18 @@ function ParameterInspector({ simulation, onSimulationUpdated }) {
   }
 
   const handleReset = () => {
+    const specParams = simulation?.visualization_spec?.parameters
+    if (Array.isArray(specParams) && specParams.length > 0) {
+      const extracted = {}
+      for (const p of specParams) {
+        if (p?.name && typeof p.value === 'number') extracted[p.name] = p.value
+      }
+      if (Object.keys(extracted).length > 0) {
+        setParams(extracted)
+        setApplied(false)
+        return
+      }
+    }
     if (simulation?.parameters) {
       setParams(simulation.parameters)
     }
@@ -70,7 +96,12 @@ function ParameterInspector({ simulation, onSimulationUpdated }) {
   const handleApply = async () => {
     setLoading(true)
     try {
-      const res = await updateVisualization(simulationId, { parameters: params })
+      const res = await updateVisualization(experimentId, {
+        experiment_id: experimentId,
+        domain,
+        parameters: params,
+        current_procedure: simulation?.procedure || null,
+      })
       if (res && res.simulation) {
         if (onSimulationUpdated) {
           onSimulationUpdated(res.simulation)
@@ -80,7 +111,6 @@ function ParameterInspector({ simulation, onSimulationUpdated }) {
       setTimeout(() => setApplied(false), 2500)
     } catch (err) {
       console.warn('Parameter update fallback:', err)
-      // If server does not have update endpoint active, update local simulation parameters
       if (onSimulationUpdated && simulation) {
         onSimulationUpdated({
           ...simulation,

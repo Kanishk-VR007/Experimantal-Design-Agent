@@ -3,26 +3,45 @@
    Centralized API service layer
    ══════════════════════════════════════════════════════════════ */
 
-export const API_BASE = 'http://localhost:8000'
-export const MEMORY_API_BASE = 'http://localhost:8001'
+// Use same-origin relative URLs routed through Vite proxy (127.0.0.1:8000 & 127.0.0.1:8001)
+// to avoid Windows IPv6 ::1 vs IPv4 0.0.0.0 timeouts and CORS mismatches.
+export const API_BASE = ''
+export const MEMORY_API_BASE = ''
 
 /**
- * Fetch backend health status
+ * Fetch backend, LLM, and memory agent health status
  */
 export async function fetchHealth() {
   try {
-    const response = await fetch(`${API_BASE}/health`)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    const response = await fetch(`${API_BASE}/health`, { signal: controller.signal })
+    clearTimeout(timer)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
     const data = await response.json()
     const isLlmHealthy = data.status === 'healthy' || Boolean(data.llm_available || data.ollama_available)
+
+    // Probe memory agent independently (non-blocking)
+    let memoryHealthy = false
+    try {
+      const memCtrl = new AbortController()
+      const memTimer = setTimeout(() => memCtrl.abort(), 2500)
+      const memRes = await fetch(`${MEMORY_API_BASE}/improve/accuracy-report`, { signal: memCtrl.signal })
+      clearTimeout(memTimer)
+      memoryHealthy = memRes.ok
+    } catch {
+      memoryHealthy = false
+    }
+
     return {
       loading: false,
       healthy: true,
       backendHealthy: true,
       ollamaAvailable: isLlmHealthy,
       llmHealthy: isLlmHealthy,
+      memoryHealthy,
       provider: data.provider || 'lmstudio',
       activeModel: data.active_model || (data.models && data.models[0]) || '',
       refinerAvailable: Boolean(data.refiner_available),
@@ -37,6 +56,7 @@ export async function fetchHealth() {
       backendHealthy: false,
       ollamaAvailable: false,
       llmHealthy: false,
+      memoryHealthy: false,
       error: 'Cannot connect to backend server',
     }
   }
@@ -96,14 +116,20 @@ export async function runSimulation(topic, design, domain = null, refinement = n
 }
 
 /**
- * Update visualization parameters
+ * Update visualization parameters and re-solve deterministic simulation
  */
-export async function updateVisualization(simulationId, params) {
+export async function updateVisualization(experimentId, payload) {
   try {
+    const body = {
+      experiment_id: payload.experiment_id || experimentId,
+      domain: payload.domain || 'physics',
+      parameters: payload.parameters || payload,
+      current_procedure: payload.current_procedure || null,
+    }
     const response = await fetch(`${API_BASE}/api/visualization/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ simulation_id: simulationId, ...params }),
+      body: JSON.stringify(body),
     })
     if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`)
     return await response.json()

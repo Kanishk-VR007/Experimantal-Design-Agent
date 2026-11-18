@@ -275,3 +275,4 @@ class ModelRegistry:
 
 
 model_registry = ModelRegistry()
+

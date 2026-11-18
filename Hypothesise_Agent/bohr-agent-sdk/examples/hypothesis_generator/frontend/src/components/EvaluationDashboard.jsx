@@ -475,7 +475,7 @@ export default function EvaluationDashboard({ simulation, design }) {
 
   // Try to load historical API reports (non-blocking)
   useEffect(() => {
-    fetch('http://localhost:8000/api/eval-reports')
+    fetch('/api/eval-reports')
       .then(r => r.json())
       .then(d => setApiReports(d.reports || []))
       .catch(() => {})
@@ -483,7 +483,7 @@ export default function EvaluationDashboard({ simulation, design }) {
 
   const loadApiReport = async (runId) => {
     try {
-      const res  = await fetch(`http://localhost:8000/api/eval-reports/${runId}`)
+      const res  = await fetch(`/api/eval-reports/${runId}`)
       const data = await res.json()
       setPickedReport(data)
     } catch {}

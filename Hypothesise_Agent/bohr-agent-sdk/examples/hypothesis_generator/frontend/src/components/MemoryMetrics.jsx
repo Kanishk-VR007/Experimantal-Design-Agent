@@ -12,8 +12,8 @@ export default function MemoryMetrics() {
       try {
         setLoading(true)
         const [accRes, feedRes] = await Promise.all([
-          fetch('http://localhost:8001/improve/accuracy-report'),
-          fetch('http://localhost:8001/improve/feedback-scores')
+          fetch('/improve/accuracy-report'),
+          fetch('/improve/feedback-scores')
         ])
         
         if (!accRes.ok || !feedRes.ok) {
