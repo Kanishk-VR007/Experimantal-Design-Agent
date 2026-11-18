@@ -23,7 +23,7 @@ function StatusBar({ status, onRefresh }) {
       <div className="status-bar status-warning">
         <span>⚠️ LM Studio / Local LLM is not running</span>
         <span className="status-help">
-          Start LM Studio server: <code>lms server start</code> &amp; load <code>oreal-deepseek-r1-distill-qwen-7b</code>
+          Start LM Studio server: <code>lms server start</code> &amp; load <code>deepseek/deepseek-r1-0528-qwen3-8b</code>
         </span>
         <button onClick={onRefresh} className="btn-refresh">
           🔄 Retry

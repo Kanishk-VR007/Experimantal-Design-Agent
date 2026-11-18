@@ -591,7 +591,7 @@ async def update_visualization_endpoint(request: VisualizationUpdateRequest):
 
         return {
             "success": True,
-            "simulation": output.dict(),
+            "simulation": output.model_dump(),
             "updated_parameters": request.parameters
         }
     except Exception as e:

@@ -95,12 +95,10 @@ def test_cs_simulation_pipeline_with_visual_data():
     print("PASS: test_cs_simulation_pipeline_with_visual_data")
 
 
-def test_biology_excluded_from_router():
-    assert "biology" not in DOMAIN_MAP
-    assert "biological" not in DOMAIN_MAP
-    assert "genomics" not in DOMAIN_MAP
-    assert "protein" not in DOMAIN_MAP
-    print("PASS: test_biology_excluded_from_router")
+def test_biology_registered_in_router():
+    assert "biology" in DOMAIN_MAP
+    assert "biological" in DOMAIN_MAP
+    print("PASS: test_biology_registered_in_router")
 
 
 def test_explicit_domain_override_prevents_hallucination():
@@ -118,6 +116,6 @@ if __name__ == "__main__":
     test_cs_algorithm_sorting_scene()
     test_cs_algorithm_graph_scene()
     test_cs_simulation_pipeline_with_visual_data()
-    test_biology_excluded_from_router()
+    test_biology_registered_in_router()
     test_explicit_domain_override_prevents_hallucination()
     print("ALL COMPUTER SCIENCE VISUALIZATION TESTS PASSED!")

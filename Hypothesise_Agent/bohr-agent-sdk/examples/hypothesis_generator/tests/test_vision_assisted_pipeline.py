@@ -89,10 +89,12 @@ class TestDomainVisualizations:
         load_val = 25.0
 
         res = civil_sim.run({
-            "experiment_type": "beam_analysis",
+            "experiment_type": "simply_supported_beam_udl",
             "parameters": {
                 "span_m": beam_len,
                 "load_kN_per_m": load_val,
+                "elastic_modulus_GPa": 200.0,
+                "moment_of_inertia_m4": 1e-4,
                 "support_type": "simply_supported",
             },
         })
@@ -148,18 +150,17 @@ class TestDomainVisualizations:
         print("[Test 3] Electronics RLC Circuit: PASSED (Resonance & Impedance Validated)")
 
     def test_04_computer_science_algorithm_dag(self):
-        """Test 4: Computer Science algorithm complexity and DAG state."""
+        """Test 4: Computer Science real BFS graph execution and DAG state."""
         res = cs_sim.run({
-            "experiment_type": "algorithm_complexity",
+            "experiment_type": "breadth_first_search",
             "parameters": {
-                "num_nodes": 8,
-                "algorithm": "bfs",
+                "start_node": "A",
             },
         })
 
         assert "numerical_results" in res
         num = res["numerical_results"]
-        assert "complexity_at_n500" in num
+        assert "algorithm_execution" in num
         assert res.get("visualization_type") == "algorithm"
         assert len(res.get("plot_data", [])) > 0
         assert "graph" in res.get("visual_data", {})

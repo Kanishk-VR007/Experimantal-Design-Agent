@@ -2,17 +2,20 @@
 Scene Specification Validator & Safety Guard
 =============================================
 Enforces strict scientific and security constraints on declarative 3D scenes:
-  1. Strict Allowlisted Primitive Types (box, sphere, cylinder, capsule, torus, arrow, line, text, plane, group).
+  1. Strict Allowlisted Primitive Types (box, sphere, cylinder, capsule, torus, arrow, line, text, plane, group, mesh).
   2. Absolute Prohibition of Executable Code (detects and strips script tags, javascript:, eval, etc.).
-  3. Physical Boundary & Coordinate Sanity Checks (positive non-zero dimensions, finite coordinates).
+  3. Physical Boundary & Coordinate Sanity Checks (positive non-zero finite dimensions, finite coordinates).
   4. Graph Integrity (verifies connections refer to existing object IDs).
   5. Animation Track Time Synchronization (ensures track sample lengths match duration/step).
+  6. Solver/Scene Synchronization Check (rejects mismatched experiment_id or scene_template).
 """
 
-import re
 import logging
-from typing import Dict, Any, List, Tuple
-from simulation_agent.visualization.scene_schema import SceneSpecification, SceneObject
+import math
+import re
+from typing import List, Optional, Tuple
+
+from simulation_agent.visualization.scene_schema import SceneObject, SceneSpecification
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +38,25 @@ class SceneValidationError(ValueError):
     pass
 
 
-def validate_scene_specification(scene: SceneSpecification) -> Tuple[bool, List[str]]:
+def validate_scene_specification(
+    scene: SceneSpecification,
+    expected_experiment_id: Optional[str] = None,
+    expected_template: Optional[str] = None,
+) -> Tuple[bool, List[str]]:
     """
     Validate a SceneSpecification object.
-    Returns (is_valid, list_of_warning_or_error_messages).
+    Returns `(is_valid, list_of_warning_or_error_messages)`.
     """
     issues: List[str] = []
+    blocking_errors: List[str] = []
     object_ids = set()
 
     def _check_string_safety(val: str, field_name: str):
         for pat in FORBIDDEN_CODE_PATTERNS:
             if pat.search(val):
-                raise SceneValidationError(f"Security Alert: Prohibited script/code detected in {field_name}: '{val[:40]}'")
+                raise SceneValidationError(
+                    f"Security Alert: Prohibited script/code detected in {field_name}: '{val[:40]}'"
+                )
 
     def _validate_object(obj: SceneObject, depth: int = 0):
         if depth > 10:
@@ -57,28 +67,30 @@ def validate_scene_specification(scene: SceneSpecification) -> Tuple[bool, List[
         _check_string_safety(obj.name, "object.name")
         _check_string_safety(obj.type, "object.type")
 
-        # Geometry allowlist
         if obj.type.lower() not in ALLOWLISTED_GEOMETRIES:
-            issues.append(f"Invalid geometry type '{obj.type}' in object '{obj.id}'. Defaulting to 'box'.")
+            msg = f"Invalid geometry type '{obj.type}' in object '{obj.id}'. Defaulting to 'box'."
+            issues.append(msg)
+            blocking_errors.append(msg)
             obj.type = "box"
 
-        # Unique ID check
         if obj.id in object_ids:
             issues.append(f"Duplicate object ID detected: '{obj.id}'")
         object_ids.add(obj.id)
 
-        # Coordinate finiteness
-        if len(obj.position) != 3 or any(not isinstance(p, (int, float)) for p in obj.position):
-            issues.append(f"Object '{obj.id}' has invalid position coordinates")
+        if len(obj.position) != 3 or any(
+            not isinstance(p, (int, float)) or not math.isfinite(float(p))
+            for p in obj.position
+        ):
+            msg = f"Invalid position coordinates on object '{obj.id}'"
+            issues.append(msg)
+            blocking_errors.append(msg)
             obj.position = [0.0, 0.0, 0.0]
 
-        # Dimension checks: dimensions must be positive
         for dim_k, dim_v in list(obj.dimensions.items()):
-            if not isinstance(dim_v, (int, float)) or dim_v <= 0:
-                issues.append(f"Object '{obj.id}' dimension '{dim_k}' must be > 0. Resetting to 0.1.")
+            if not isinstance(dim_v, (int, float)) or not math.isfinite(float(dim_v)) or dim_v <= 0:
+                issues.append(f"Object '{obj.id}' dimension '{dim_k}' must be > 0 and finite. Resetting to 0.1.")
                 obj.dimensions[dim_k] = 0.1
 
-        # Recursively validate children
         if obj.children:
             for ch in obj.children:
                 _validate_object(ch, depth + 1)
@@ -108,18 +120,47 @@ def validate_scene_specification(scene: SceneSpecification) -> Tuple[bool, List[
             if obj_id not in object_ids:
                 issues.append(f"Animation track targets unknown object '{obj_id}'")
             if track.position and t_len > 0 and len(track.position) != t_len:
-                issues.append(f"Animation track for '{obj_id}' position samples ({len(track.position)}) mismatch time_array length ({t_len})")
+                msg = (
+                    f"Invalid animation track length for '{obj_id}': "
+                    f"position samples ({len(track.position)}) mismatch time_array length ({t_len})"
+                )
+                issues.append(msg)
+                blocking_errors.append(msg)
 
     # 5. String safety on root properties
     _check_string_safety(scene.title, "scene.title")
     _check_string_safety(scene.description, "scene.description")
     _check_string_safety(scene.scene_template, "scene.scene_template")
 
-    is_valid = len([i for i in issues if "Security Alert" in i or "Invalid" in i]) == 0
+    # 6. Solver <-> 3D scene synchronization check
+    if expected_template and scene.scene_template != expected_template:
+        msg = (
+            f"Scene/Solver template mismatch: expected '{expected_template}', "
+            f"got '{scene.scene_template}'"
+        )
+        issues.append(msg)
+        blocking_errors.append(msg)
+
+    if expected_experiment_id and scene.experiment_id != expected_experiment_id:
+        # Allow if template matches (e.g., canonical beam variant using beam_deformation)
+        if not expected_template or scene.scene_template != expected_template:
+            msg = (
+                f"Scene/Solver experiment_id mismatch: expected '{expected_experiment_id}', "
+                f"got '{scene.experiment_id}'"
+            )
+            issues.append(msg)
+            blocking_errors.append(msg)
+
+    is_valid = len(blocking_errors) == 0
     if issues:
-        logger.info("[SceneValidator] Scene '%s' validated with %d notices: %s", scene.experiment_id, len(issues), "; ".join(issues[:3]))
+        logger.info(
+            "[SceneValidator] Scene '%s' validated (valid=%s) with %d notices: %s",
+            scene.experiment_id,
+            is_valid,
+            len(issues),
+            "; ".join(issues[:3]),
+        )
     else:
         logger.info("[SceneValidator] Scene '%s' passed all structural & security checks.", scene.experiment_id)
 
     return is_valid, issues
-

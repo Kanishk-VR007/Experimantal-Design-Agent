@@ -122,7 +122,8 @@ class VisionService:
     ) -> VisualReconstructionInstructions:
         """Parse, validate, and fall back to domain heuristics if needed."""
         parsed = None
-        cleaned = raw_text.strip()
+        from simulation_agent.llm_client import strip_thinking_tags
+        cleaned = strip_thinking_tags(raw_text).strip()
         if "```json" in cleaned:
             cleaned = cleaned.split("```json", 1)[-1].split("```", 1)[0].strip()
         elif "```" in cleaned:

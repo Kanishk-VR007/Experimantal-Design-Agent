@@ -29,11 +29,26 @@ def get_llm_config() -> Dict[str, str]:
     """Read current LLM configuration dynamically from environment."""
     return {
         "provider": os.getenv("LLM_PROVIDER", "lmstudio").lower().strip(),
-        "lmstudio_url": os.getenv("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/"),
-        "lmstudio_model": os.getenv("LMSTUDIO_MODEL", "oreal-deepseek-r1-distill-qwen-7b").strip(),
-        "lmstudio_refiner_model": os.getenv("LMSTUDIO_REFINER_MODEL", "qwen/qwen3-4b-thinking-2507").strip(),
+        "lmstudio_url": os.getenv("LM_STUDIO_OPENAI_BASE_URL", os.getenv("LMSTUDIO_URL", "http://localhost:1234/v1")).rstrip("/"),
+        "lmstudio_model": (
+            os.getenv("LM_STUDIO_MAIN_MODEL")
+            or os.getenv("MAIN_MODEL")
+            or os.getenv("LMSTUDIO_MODEL")
+            or "deepseek/deepseek-r1-0528-qwen3-8b"
+        ).strip(),
+        "lmstudio_refiner_model": (
+            os.getenv("LM_STUDIO_PROMPT_REFINER_MODEL")
+            or os.getenv("PROMPT_REFINER_MODEL")
+            or os.getenv("LMSTUDIO_REFINER_MODEL")
+            or "qwen/qwen3-4b-thinking-2507"
+        ).strip(),
+        "lmstudio_vision_model": (
+            os.getenv("LM_STUDIO_VISION_MODEL")
+            or os.getenv("VISION_MODEL")
+            or "qwen3-vl-4b-thinking"
+        ).strip(),
         "ollama_url": os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/"),
-        "ollama_model": os.getenv("OLLAMA_MODEL", "qwen3:4b-thinking").strip(),
+        "ollama_model": os.getenv("OLLAMA_MODEL", "qwen/qwen3-4b-thinking-2507").strip(),
     }
 
 
@@ -490,7 +505,7 @@ def stream_chat_completion(
     if not health["available"]:
         raise RuntimeError(
             "No local LLM server is available. Start LM Studio server (`lms server start`) "
-            "and load `oreal-deepseek-r1-distill-qwen-7b`, or start Ollama."
+            "and load `deepseek/deepseek-r1-0528-qwen3-8b`, or start Ollama."
         )
 
     cfg = get_llm_config()

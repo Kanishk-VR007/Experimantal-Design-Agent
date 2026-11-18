@@ -1,173 +1,118 @@
 """
-LLM Fallback Engine
-General/multi-domain fallback using Claude API or Ollama
-Handles cases where deterministic engines don't apply
+Unsupported / Fallback Handler (No Fabricated Scientific Data)
+==============================================================
+Replaces the legacy random sine-wave generator.
+
+Non-negotiable scientific integrity rules:
+  - NEVER fabricate random sinusoidal noise as scientific experimental data.
+  - When no registered deterministic solver applies, return an explicit
+    `status="unsupported"` (or `status="failed"` on solver error) with
+    clear diagnostic reasons and guidance on supported experiments.
 """
 
-import json
-import re
-import os
-import requests
-from dotenv import load_dotenv
-
-load_dotenv()
+from typing import Dict, Any, Optional
 
 
-def run_with_claude(procedure: dict, error_context: str = "") -> dict:
-    """Fallback using Claude API (requires ANTHROPIC_API_KEY)"""
-    try:
-        import anthropic
-        client = anthropic.Anthropic()
-        
-        SYSTEM = """You are a scientific simulation engine embedded in a research AI pipeline.
-Given an experimental procedure as JSON, simulate it scientifically and return ONLY a
-valid JSON object — no markdown, no preamble — with this exact structure:
-{
-  "numerical_results": { ... },
-  "plot_data": [
-    {
-      "plot_type": "line",
-      "title": "...",
-      "x_label": "...",
-      "y_label": "...",
-      "x": [...],
-      "y": [...],
-      "series_name": "..."
-    }
-  ],
-  "observations": ["...", "..."],
-  "confidence_score": 0.0_to_1.0,
-  "simulation_log": ["step 1...", "step 2..."]
-}
-Ensure the output represents a valid static 2D simulation. Generate realistic, scientifically plausible values. x and y arrays must be 1D arrays with 50-200 points. No 3D data or animations."""
+def build_unsupported_response(
+    procedure: dict,
+    reason: str = "",
+    supported_examples: Optional[list] = None,
+) -> Dict[str, Any]:
+    """Return an honest unsupported-experiment result with zero fabricated data."""
+    domain = str(procedure.get("domain", "general") or "general")
+    exp_type = str(procedure.get("experiment_type") or "unspecified")
+    topic = str(procedure.get("topic") or procedure.get("hypothesis") or "Unknown experiment")
+    detail = reason or f"No registered deterministic scientific solver for domain='{domain}', experiment_type='{exp_type}'."
 
-        note = f"\nNote: Primary engine failed: {error_context}" if error_context else ""
-        prompt = f"Simulate this experiment:{note}\n\n{json.dumps(procedure, indent=2)}"
+    obs = [
+        f"Unsupported experiment: {detail}",
+        "No fabricated or synthetic fallback curve was generated.",
+    ]
+    if supported_examples:
+        obs.append("Supported experiments in this domain: " + ", ".join(supported_examples[:8]))
 
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            temperature=0.3,
-            top_p=0.9,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        raw = response.content[0].text
-        clean = re.sub(r"```json|```", "", raw).strip()
-        return json.loads(clean)
-    except Exception as e:
-        print(f"⚠️  Claude API fallback failed: {e}")
-        return run_with_ollama(procedure, error_context)
-
-
-def run_with_ollama(procedure: dict, error_context: str = "") -> dict:
-    """Fallback using configured local LLM (LM Studio OREAL-DeepSeek-R1 first, Ollama second)."""
-    try:
-        from ..llm_client import chat_completion
-
-        prompt = f"""You are a scientific simulation engine. Generate a simulation for this experiment.
-
-Experiment Procedure:
-{json.dumps(procedure, indent=2)}
-
-Return ONLY valid JSON (no markdown) with this structure:
-{{
-  "numerical_results": {{}},
-  "plot_data": [
-    {{
-      "plot_type": "line",
-      "title": "Simulation Result",
-      "x_label": "X Axis",
-      "y_label": "Y Axis",
-      "x": [0, 1, 2, 3, 4, 5],
-      "y": [0, 1.5, 2.3, 3.1, 3.5, 4.0],
-      "series_name": "Data"
-    }}
-  ],
-  "observations": ["observation 1", "observation 2"],
-  "confidence_score": 0.7,
-  "simulation_log": ["step 1", "step 2"]
-}}
-
-Ensure the output represents a valid static 2D simulation. Generate realistic scientific data with 50-200 data points in 1D arrays for x and y. Do not include any 3D properties or animated data."""
-
-        raw_text = chat_completion(
-            messages=[
-                {"role": "system", "content": "Return ONLY a valid JSON object matching the schema."},
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "<think>\n</think>\n{\n"},
-            ],
-            temperature=0.2,
-            max_tokens=1600,
-            timeout=60,
-        )
-
-        if raw_text:
-            clean = re.sub(r"```json|```", "", raw_text).strip()
-            if not clean.startswith("{"):
-                clean = "{\n" + clean
-            try:
-                return json.loads(clean)
-            except json.JSONDecodeError:
-                json_match = re.search(r"\{.*\}", clean, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group(0))
-
-        raise RuntimeError("Local LLM returned invalid or empty JSON")
-
-    except Exception as e:
-        print(f"⚠️  Local LLM fallback failed: {e}")
-        return get_minimal_fallback(procedure)
-
-
-def get_minimal_fallback(procedure: dict) -> dict:
-    """Minimal hardcoded fallback when all LLMs fail"""
-    import numpy as np
-    
-    x = np.linspace(0, 10, 100).tolist()
-    y = (np.sin(x) + np.random.normal(0, 0.1, 100)).tolist()
-    
     return {
-        "numerical_results": {
-            "status": "fallback_used",
-            "mean_value": np.mean(y),
-            "std_dev": np.std(y),
+        "status": "unsupported",
+        "simulation_status": "unsupported",
+        "simulation_type": "unsupported",
+        "engine_used": "none",
+        "experiment_id": exp_type,
+        "domain": domain,
+        "solver": {
+            "name": "none",
+            "version": "2.0",
+            "method": "No registered deterministic solver",
+            "equations": [],
         },
-        "plot_data": [{
-            "plot_type": "line",
-            "title": f"Simulation: {procedure.get('hypothesis', 'Unknown')}",
-            "x_label": "Time/Trial",
-            "y_label": "Measured Value",
-            "x": x,
-            "y": y,
-            "series_name": "Data Series"
-        }],
-        "observations": [
-            "Fallback simulation used due to engine unavailability",
-            f"Generated synthetic data for domain: {procedure.get('domain', 'general')}"
+        "numerical_results": {},
+        "plot_data": [],
+        "visual_data": None,
+        "visualization_type": "none",
+        "observations": obs,
+        "assumptions": [],
+        "limitations": [detail],
+        "warnings": [detail],
+        "error": detail,
+        "simulation_log": [
+            f"[unsupported] Topic='{topic[:120]}', domain='{domain}', experiment_type='{exp_type}'",
+            f"[unsupported] Reason: {detail}",
         ],
-        "confidence_score": 0.5,
-        "simulation_log": ["[fallback] Minimal simulation generated"]
     }
 
 
-def run(procedure: dict, error_context: str = "") -> dict:
+def build_failed_response(procedure: dict, error_context: str) -> Dict[str, Any]:
+    """Return an honest failed-simulation result when a solver raises or fails validation."""
+    domain = str(procedure.get("domain", "general") or "general")
+    exp_type = str(procedure.get("experiment_type") or "unspecified")
+    detail = str(error_context or "Numerical solver failed.")
+
+    return {
+        "status": "failed",
+        "simulation_status": "failed",
+        "simulation_type": "unsupported",
+        "engine_used": "failed_solver",
+        "experiment_id": exp_type,
+        "domain": domain,
+        "solver": {
+            "name": exp_type,
+            "version": "2.0",
+            "method": "Solver execution failed",
+            "equations": [],
+        },
+        "numerical_results": {},
+        "plot_data": [],
+        "visual_data": None,
+        "visualization_type": "none",
+        "observations": [
+            f"Simulation failed: {detail}",
+            "No fabricated fallback data was substituted.",
+        ],
+        "assumptions": [],
+        "limitations": [detail],
+        "warnings": [detail],
+        "error": detail,
+        "simulation_log": [f"[failed] {detail}"],
+    }
+
+
+def get_minimal_fallback(procedure: dict, error_context: str = "") -> Dict[str, Any]:
     """
-    Main entry point for LLM fallback.
-    Tries Claude → Ollama → Minimal fallback
+    Legacy compatibility symbol.
+    Previously generated random `sin(x) + normal(0, 0.1)` noise; now strictly returns
+    an honest `unsupported` status with zero fabricated measurements.
     """
-    # Try Claude first if API key available
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            return run_with_claude(procedure, error_context)
-        except:
-            pass
-    
-    # Try Ollama
-    try:
-        return run_with_ollama(procedure, error_context)
-    except:
-        pass
-    
-    # Last resort
-    return get_minimal_fallback(procedure)
+    return build_unsupported_response(
+        procedure,
+        reason=error_context or "Requested experiment has no verified deterministic solver.",
+    )
+
+
+def run(procedure: dict, error_context: str = "") -> Dict[str, Any]:
+    """
+    Main entry point when routing cannot execute a registered deterministic solver.
+    Distinguishes solver failure from unsupported experiment without fabricating data.
+    """
+    err = str(error_context or "").strip()
+    if err and not err.lower().startswith("unknown") and "unsupported" not in err.lower():
+        return build_failed_response(procedure, err)
+    return build_unsupported_response(procedure, reason=err)

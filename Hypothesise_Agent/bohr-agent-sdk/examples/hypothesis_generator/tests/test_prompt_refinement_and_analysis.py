@@ -95,7 +95,7 @@ def test_cross_domain_analysis_depth():
         ("chemistry", "Reaction kinetics Arrhenius temperature effect", "## 1. HYPOTHESIS\nIf temperature increases then rate constant k increases.\n## 2. VARIABLES\nT=298K"),
         ("biology", "Bacterial population logistic growth curve", "## 1. HYPOTHESIS\nIf nutrients saturate then growth plateaus.\n## 2. VARIABLES\nr=0.5"),
         ("computer_science", "Compare CNN vs Transformer on CIFAR-10", "## 1. HYPOTHESIS\nTransformer achieves higher accuracy than CNN.\n## 2. VARIABLES\nepochs=50"),
-        ("civil_engineering", "Simply supported steel beam under load", "## 1. HYPOTHESIS\nIf load increases then beam deflection increases.\n## 2. VARIABLES\nspan=6m"),
+        ("civil_engineering", "Simply supported steel beam under 10 kN/m uniformly distributed load", "## 1. HYPOTHESIS\nIf load increases then beam deflection increases.\n## 2. VARIABLES\nspan=6m, w=10 kN/m, E=200 GPa, I=8.33e-6 m4"),
     ]
     for expected_domain, topic, design in cases:
         sim = run_simulation({"topic": topic, "design": design})

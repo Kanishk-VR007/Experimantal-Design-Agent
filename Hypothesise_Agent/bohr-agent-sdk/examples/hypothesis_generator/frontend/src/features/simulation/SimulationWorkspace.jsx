@@ -26,21 +26,32 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
 
   const handlePipelineComplete = (result) => {
     if (!result) return
+    const simRes = result.simulation_results || {}
     const newSim = {
       simulation_id: `sim_vision_${Date.now()}`,
-      domain: result.refined_prompt?.domain || simulation?.domain || 'general',
-      engine_used: 'Deterministic Domain Engine + Multi-Model 3D Pipeline',
-      hypothesis: result.refined_prompt?.refined_experiment_prompt || simulation?.hypothesis || '',
-      numerical_results: result.simulation_results?.numerical_results || {},
-      plot_data: result.simulation_results?.plot_data || [],
-      procedure: result.simulation_results?.procedure || {},
+      domain: simRes.domain || result.refined_prompt?.domain || simulation?.domain || 'general',
+      experiment_id: simRes.experiment_id || result.refined_prompt?.experiment_type || null,
+      status: simRes.status || result.simulation_status || 'success',
+      simulation_status: simRes.simulation_status || result.simulation_status || 'success',
+      engine_used: simRes.engine_used || 'Deterministic Domain Engine + Multi-Model 3D Pipeline',
+      solver: simRes.solver || null,
+      validation: simRes.validation || null,
+      visualization: simRes.visualization || null,
+      assumptions: simRes.assumptions || [],
+      limitations: simRes.limitations || [],
+      warnings: simRes.warnings || [],
+      hypothesis: simRes.hypothesis || result.refined_prompt?.refined_experiment_prompt || simulation?.hypothesis || '',
+      numerical_results: simRes.numerical_results || {},
+      plot_data: simRes.plot_data || [],
+      procedure: simRes.procedure || {},
       visualization_spec: result.scene_specification,
-      visualization_type: '3d_model',
+      visualization_type: simRes.visualization_type || '3d_model',
       observations: [
+        ...(simRes.observations || []),
         `Multi-model vision guidance incorporated from ${result.selected_reference?.source_name || 'Open Scientific Repository'}.`,
         `Scene validated with SceneValidator (allowlisted primitives: ${result.scene_specification?.objects?.length || 0} objects).`,
       ],
-      confidence_score: 0.96,
+      confidence_score: simRes.confidence_score ?? null,
       visual_reconstruction_instructions: result.visual_reconstruction_instructions,
       selected_reference: result.selected_reference,
     }
@@ -185,7 +196,16 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
 
   const {
     domain,
+    experiment_id,
+    status,
+    simulation_status,
     engine_used,
+    solver,
+    validation,
+    visualization,
+    assumptions = [],
+    limitations = [],
+    warnings = [],
     hypothesis,
     numerical_results = {},
     plot_data = [],
@@ -196,6 +216,16 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
     visualization_spec,
     simulation_log = []
   } = simulation
+
+  const effectiveStatus = simulation_status || status || 'success'
+  const statusPalette = {
+    success: { bg: 'rgba(16,185,129,0.16)', border: '#10b981', text: '#34d399', label: 'VALIDATED' },
+    partial: { bg: 'rgba(245,158,11,0.16)', border: '#f59e0b', text: '#fbbf24', label: 'PARTIAL' },
+    illustrative: { bg: 'rgba(139,92,246,0.18)', border: '#8b5cf6', text: '#c4b5fd', label: 'ILLUSTRATIVE' },
+    validation_failed: { bg: 'rgba(239,68,68,0.18)', border: '#ef4444', text: '#f87171', label: 'VALIDATION FAILED' },
+    unsupported: { bg: 'rgba(148,163,184,0.16)', border: '#64748b', text: '#cbd5e1', label: 'UNSUPPORTED' },
+    failed: { bg: 'rgba(239,68,68,0.18)', border: '#ef4444', text: '#f87171', label: 'FAILED' },
+  }[effectiveStatus] || { bg: 'rgba(59,130,246,0.16)', border: '#3b82f6', text: '#93c5fd', label: effectiveStatus.toUpperCase() }
 
   // Render appropriate domain SVG visualizer
   const renderDomainVisualizer = () => {
@@ -229,8 +259,48 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
             <span className="dot" />
             <span>{domain ? domain.toUpperCase() : 'PHYSICS'}</span>
           </div>
-          <span className="engine-name-label">Solver: {engine_used || 'SciPy ODE Engine'}</span>
-          {confidence_score && (
+          <span
+            className="status-pill-badge"
+            style={{
+              padding: '3px 9px',
+              borderRadius: '999px',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              letterSpacing: '0.03em',
+              background: statusPalette.bg,
+              border: `1px solid ${statusPalette.border}`,
+              color: statusPalette.text,
+            }}
+          >
+            {statusPalette.label}
+          </span>
+          <span className="engine-name-label">
+            Solver: {solver?.name || experiment_id || engine_used || 'Deterministic Engine'}
+          </span>
+          {validation && typeof validation.checks_total === 'number' && (
+            <span
+              className="confidence-pill"
+              title={`Validation level: ${validation.validation_level || 'checked'}`}
+            >
+              Checks: {validation.checks_passed}/{validation.checks_total}
+            </span>
+          )}
+          {visualization && visualization.is_simulation_backed === false && visualization_spec && (
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: '6px',
+                fontSize: '0.68rem',
+                fontWeight: 600,
+                background: 'rgba(139,92,246,0.2)',
+                border: '1px solid #8b5cf6',
+                color: '#ddd6fe',
+              }}
+            >
+              Illustrative 3D
+            </span>
+          )}
+          {confidence_score != null && (
             <span className="confidence-pill">
               Confidence: {(confidence_score * 100).toFixed(1)}%
             </span>
@@ -496,6 +566,68 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
                   )
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Scientific Validation, Solver & Assumptions Panel */}
+          {(solver || validation || assumptions.length > 0 || limitations.length > 0 || warnings.length > 0) && (
+            <div
+              className="observations-banner"
+              style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', borderColor: statusPalette.border }}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', fontSize: '0.78rem' }}>
+                <strong style={{ color: statusPalette.text }}>
+                  Scientific Validation ({effectiveStatus.replace(/_/g, ' ')})
+                </strong>
+                {solver?.method && (
+                  <span style={{ color: '#cbd5e1' }}>Method: <code>{solver.method}</code></span>
+                )}
+                {visualization?.template && (
+                  <span style={{ color: '#94a3b8' }}>
+                    3D Template: <code>{visualization.template}</code> ({visualization.scene_valid ? 'verified' : 'unverified'})
+                  </span>
+                )}
+              </div>
+              {solver?.equations && solver.equations.length > 0 && (
+                <div style={{ fontSize: '0.74rem', color: '#93c5fd' }}>
+                  Equations: {solver.equations.join('  |  ')}
+                </div>
+              )}
+              {validation?.checks && validation.checks.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {validation.checks.map((chk, idx) => (
+                    <span
+                      key={idx}
+                      title={chk.detail}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.7rem',
+                        background: chk.passed ? 'rgba(16,185,129,0.14)' : 'rgba(239,68,68,0.18)',
+                        border: `1px solid ${chk.passed ? '#10b981' : '#ef4444'}`,
+                        color: chk.passed ? '#6ee7b7' : '#fca5a5',
+                      }}
+                    >
+                      {chk.passed ? '✓' : '✕'} {chk.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {warnings.length > 0 && (
+                <div style={{ fontSize: '0.74rem', color: '#fbbf24' }}>
+                  <strong>Warnings:</strong> {warnings.join(' • ')}
+                </div>
+              )}
+              {assumptions.length > 0 && (
+                <div style={{ fontSize: '0.73rem', color: '#94a3b8' }}>
+                  <strong>Assumptions:</strong> {assumptions.join(' • ')}
+                </div>
+              )}
+              {limitations.length > 0 && (
+                <div style={{ fontSize: '0.73rem', color: '#94a3b8' }}>
+                  <strong>Limitations:</strong> {limitations.join(' • ')}
+                </div>
+              )}
             </div>
           )}
 

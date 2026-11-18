@@ -1,19 +1,37 @@
 """
-Output Formatter & Quantitative Statistical Post-Processor
-Normalizes engine outputs to SimulationOutput schema, performs deterministic
-SciPy/NumPy statistical analysis across every domain, and generates the
-validated 3D scene specification.
+Output Formatter & Scientific Post-Processor
+=============================================
+Normalizes engine outputs to the v2 `SimulationOutput` contract:
+  1. Executes `ScientificValidator` BEFORE finalizing status and 3D scene generation.
+  2. Never fabricates arbitrary confidence scores (`confidence_score=None`).
+  3. Never computes Student-t 95% confidence intervals over deterministic ODE/analytical curves.
+     Computes honest deterministic descriptive statistics (min, max, mean, std, range, RMS, derivative).
+  4. Generates registry-synchronized 3D scenes and verifies them with `validate_scene_specification`.
+  5. Preserves honest statuses: `success`, `partial`, `validation_failed`, `unsupported`, `failed`, `illustrative`.
 """
 
+from __future__ import annotations
+
 import copy
-from typing import Optional
+from typing import Any, Dict, List, Optional
+
 import numpy as np
-from scipy import stats as scipy_stats
-from .schema import SimulationOutput, PlotData, SeriesData
-from .visualization.scene_generator import generate_scene_specification
+
+from .experiment_registry import get_experiment_entry
+from .schema import PlotData, SeriesData, SimulationOutput
+from .validation.scientific_validator import validate_simulation_result
+from .visualization.scene_generator import (
+    generate_scene_specification,
+    resolve_visualization_template,
+)
+from .visualization.scene_schema import SceneSpecification
+
+try:
+    from backend.visualization.scene_validator import validate_scene_specification
+except Exception:
+    validate_scene_specification = None
 
 
-#: Engines that compute results directly from fixed physical/chemical/engineering models.
 _DETERMINISTIC_ENGINES = {
     "chem_sim",
     "bio_sim",
@@ -27,45 +45,43 @@ _DETERMINISTIC_ENGINES = {
 
 
 def _generation_provenance(engine_used: str, status: str = "success", generation_method: str = "") -> str:
-    """
-    Honest data-provenance label for the numbers being reported.
-
-    Derived from the engine/method that actually produced the data, so the output
-    never claims an audit or validation step that did not take place.
-    """
+    """Honest data-provenance label derived from the engine/method that actually ran."""
     engine = str(engine_used or "").strip().lower()
     method = str(generation_method or "").strip().lower()
     state = str(status or "").strip().lower()
 
-    if state in ("fallback", "failed") or "fallback" in engine or "error" in engine or "synthetic" in engine:
-        return "Synthetic illustrative data - NOT experimentally validated"
+    if state in ("unsupported", "failed") or "fallback" in engine or "error" in engine:
+        return "Unsupported or failed simulation — no fabricated numerical data generated"
+    if state == "illustrative" or method in ("parametric_model", "parametric_illustrative"):
+        return "Illustrative parametric model — deterministic surrogate, not empirical dataset training"
+    if state == "validation_failed":
+        return "Solver output failed scientific validation checks — inspect validation report"
     if method == "python_backup":
-        return "Generated via LLM Python code execution - review recommended"
+        return "Generated via sandboxed LLM Python code execution — review recommended"
     if method == "equation_model":
-        return "Generated via LLM equation model - review recommended"
+        return "Generated via AST-checked LLM equation model — review recommended"
     if method == "deterministic_engine" or engine in _DETERMINISTIC_ENGINES:
-        return "Generated via deterministic domain engine"
+        return "Computed via deterministic domain physics/math/algorithm solver"
     if "llm" in engine or "dynamic" in engine:
-        return "Generated via LLM code synthesis - review recommended"
-    return f"Unverified provenance (engine '{engine_used}') - review recommended"
+        return "Generated via LLM code synthesis — review recommended"
+    return f"Unverified provenance (engine '{engine_used}') — review recommended"
 
 
 def _enrich_scientific_analysis(
     numerical_results: dict,
-    plots: list,
-    observations: list,
-    simulation_log: list,
+    plots: List[PlotData],
+    observations: List[str],
+    simulation_log: List[str],
     procedure: dict,
     engine_used: str,
-    status: str = "success",
-    generation_method: str = "",
-    validation: Optional[dict] = None,
+    status: str,
+    generation_method: str,
+    validation_dict: Dict[str, Any],
 ) -> tuple:
     """
-    Compute genuine descriptive statistics, 95% confidence intervals, linear
-    regression significance, and derivative sensitivity curves directly from the
-    deterministic engine's simulated plot vectors.
-    Never invents synthetic data; only analyzes existing simulated arrays.
+    Compute honest deterministic descriptive statistics (min, max, mean, median, std,
+    range, RMS, and derivative sensitivity) on existing simulated arrays.
+    NEVER fabricates Student-t 95% confidence intervals on deterministic trajectories.
     """
     enriched_num = copy.deepcopy(numerical_results) if isinstance(numerical_results, dict) else {}
     enriched_plots = list(plots)
@@ -74,164 +90,158 @@ def _enrich_scientific_analysis(
 
     domain = str(procedure.get("domain", "general"))
     params = procedure.get("parameters", {})
+    total_points = sum(len(p.y) for p in enriched_plots)
 
-    # Locate primary numeric series for statistical analysis
+    # For unsupported/failed runs, do not fabricate statistics or extra plots
+    if status in ("unsupported", "failed"):
+        provenance = _generation_provenance(engine_used, status, generation_method)
+        enriched_num["model_validation"] = {
+            "domain": domain,
+            "engine": engine_used,
+            "status": status,
+            "data_provenance": provenance,
+            "validation": {
+                "status": validation_dict.get("status", status),
+                "passed": False,
+                "checks_passed": validation_dict.get("checks_passed", 0),
+                "checks_total": validation_dict.get("checks_total", 0),
+                "warnings": list(validation_dict.get("warnings") or []),
+                "errors": list(validation_dict.get("errors") or []),
+            },
+        }
+        enriched_log.append(f"[L5_provenance] {provenance}")
+        return enriched_num, enriched_plots, enriched_obs, enriched_log
+
+    # Locate primary numeric plot series for deterministic descriptive stats
     numeric_plots = []
     for p in enriched_plots:
         try:
             xs = [float(v) for v in p.x]
             ys = [float(v) for v in p.y]
             if len(ys) >= 4 and len(xs) == len(ys):
-                numeric_plots.append((p, np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)))
+                xa = np.asarray(xs, dtype=float)
+                ya = np.asarray(ys, dtype=float)
+                if np.all(np.isfinite(xa)) and np.all(np.isfinite(ya)):
+                    numeric_plots.append((p, xa, ya))
         except (ValueError, TypeError):
             continue
-
-    total_points = sum(len(p.y) for p in enriched_plots)
 
     if numeric_plots:
         primary_plot, x_arr, y_arr = numeric_plots[0]
         mean_val = float(np.mean(y_arr))
-        std_val = float(np.std(y_arr, ddof=1)) if len(y_arr) > 1 else 0.0
+        std_val = float(np.std(y_arr, ddof=0))
         median_val = float(np.median(y_arr))
-        q25, q75 = np.percentile(y_arr, [25, 75])
-        iqr_val = float(q75 - q25)
-        sem_val = std_val / np.sqrt(len(y_arr)) if len(y_arr) > 1 else 0.0
-
-        if sem_val > 0 and len(y_arr) > 2:
-            ci_low, ci_high = scipy_stats.t.interval(0.95, df=len(y_arr) - 1, loc=mean_val, scale=sem_val)
-        else:
-            ci_low, ci_high = mean_val, mean_val
+        min_val = float(np.min(y_arr))
+        max_val = float(np.max(y_arr))
+        range_val = float(max_val - min_val)
+        rms_val = float(np.sqrt(np.mean(y_arr ** 2)))
 
         enriched_num.setdefault("statistical_summary", {
             "sample_count": int(len(y_arr)),
-            "mean": round(mean_val, 5),
-            "std_dev": round(std_val, 5),
-            "median": round(median_val, 5),
-            "iqr": round(iqr_val, 5),
-            "min": round(float(np.min(y_arr)), 5),
-            "max": round(float(np.max(y_arr)), 5),
-            "ci_95_lower": round(float(ci_low), 5),
-            "ci_95_upper": round(float(ci_high), 5),
+            "mean": round(mean_val, 6),
+            "std_dev": round(std_val, 6),
+            "median": round(median_val, 6),
+            "min": round(min_val, 6),
+            "max": round(max_val, 6),
+            "range": round(range_val, 6),
+            "rms_magnitude": round(rms_val, 6),
+            "note": "Deterministic trajectory descriptive statistics (not experimental sample confidence intervals).",
         })
 
-        # Linear trend & correlation test
-        if np.ptp(x_arr) > 1e-12 and np.ptp(y_arr) > 1e-12:
-            reg = scipy_stats.linregress(x_arr, y_arr)
-            enriched_num.setdefault("regression_analysis", {
-                "slope": round(float(reg.slope), 6),
-                "intercept": round(float(reg.intercept), 5),
-                "r_squared": round(float(reg.rvalue ** 2), 5),
-                "p_value": float(f"{reg.pvalue:.4e}"),
-                "pearson_r": round(float(reg.rvalue), 5),
-            })
-
-            # Add first-derivative sensitivity plot if plot count < 4 and domain hasn't already provided 4
-            if len(enriched_plots) < 4 and len(y_arr) >= 10:
+        # First-derivative sensitivity plot when x is strictly monotonic & plot count < 3
+        if np.ptp(x_arr) > 1e-12 and np.ptp(y_arr) > 1e-12 and len(y_arr) >= 10:
+            diffs = np.diff(x_arr)
+            if np.all(diffs > 0) or np.all(diffs < 0):
                 dy_dx = np.gradient(y_arr, x_arr)
-                # Guard against duplicate x spikes causing inf
-                finite_mask = np.isfinite(dy_dx)
-                if np.any(finite_mask):
-                    dy_dx = np.where(finite_mask, dy_dx, 0.0)
-                    enriched_plots.append(PlotData(
-                        plot_type="line",
-                        title=f"Rate of Change Analysis: d({primary_plot.y_label})/d({primary_plot.x_label})",
-                        x_label=primary_plot.x_label,
-                        y_label=f"dY/dX",
-                        x=x_arr.tolist(),
-                        y=dy_dx.tolist(),
-                        series_name="Derivative Sensitivity",
-                    ))
+                if np.all(np.isfinite(dy_dx)):
                     enriched_num.setdefault("signal_dynamics", {
-                        "peak_rate_of_change": round(float(np.max(np.abs(dy_dx))), 5),
-                        "rms_magnitude": round(float(np.sqrt(np.mean(y_arr ** 2))), 5),
-                        "dynamic_span": round(float(np.ptp(y_arr)), 5),
+                        "peak_rate_of_change": round(float(np.max(np.abs(dy_dx))), 6),
+                        "rms_magnitude": round(rms_val, 6),
+                        "dynamic_span": round(range_val, 6),
                     })
+                    if len(enriched_plots) < 3:
+                        enriched_plots.append(PlotData(
+                            plot_type="line",
+                            title=f"Rate of Change: d({primary_plot.y_label})/d({primary_plot.x_label})",
+                            x_label=primary_plot.x_label,
+                            y_label="dY/dX",
+                            x=x_arr.tolist(),
+                            y=dy_dx.tolist(),
+                            series_name="Derivative Sensitivity",
+                        ))
 
-        # Add binned frequency / value distribution if still < 4 plots
-        if len(enriched_plots) < 4 and len(y_arr) >= 12 and np.ptp(y_arr) > 1e-12:
-            counts, edges = np.histogram(y_arr, bins=min(12, max(6, len(y_arr) // 15)))
-            centers = 0.5 * (edges[:-1] + edges[1:])
-            enriched_plots.append(PlotData(
-                plot_type="bar",
-                title=f"Response Distribution ({primary_plot.y_label})",
-                x_label=primary_plot.y_label,
-                y_label="Sample Frequency",
-                x=[round(float(c), 4) for c in centers],
-                y=[int(c) for c in counts],
-                series_name="Frequency Distribution",
-            ))
-
-        stat_line = (
-            f"Statistical analysis (n={len(y_arr)}): mean = {mean_val:.4f} ± {std_val:.4f} "
-            f"(95% CI: [{ci_low:.4f}, {ci_high:.4f}])"
+        desc_line = (
+            f"Deterministic trajectory summary (n={len(y_arr)}): "
+            f"min={min_val:.4g}, max={max_val:.4g}, mean={mean_val:.4g}, RMS={rms_val:.4g}"
         )
-        if stat_line not in enriched_obs:
-            enriched_obs.append(stat_line)
+        if desc_line not in enriched_obs:
+            enriched_obs.append(desc_line)
     else:
         enriched_num.setdefault("statistical_summary", {
             "metric_groups": len(enriched_num),
             "plot_count": len(enriched_plots),
             "data_points": total_points,
+            "note": "Discrete / categorical simulation output summary.",
         })
 
     provenance = _generation_provenance(engine_used, status, generation_method)
-
     model_validation = enriched_num.get("model_validation")
     if not isinstance(model_validation, dict):
         model_validation = {}
         enriched_num["model_validation"] = model_validation
+
     model_validation.update({
         "domain": domain,
         "engine": engine_used,
+        "status": status,
         "generation_method": generation_method or None,
         "data_provenance": provenance,
         "parameters_evaluated": len(params),
         "plots_generated": len(enriched_plots),
         "total_simulated_points": int(total_points),
+        "validation": {
+            "status": validation_dict.get("status", status),
+            "passed": bool(validation_dict.get("passed", False)),
+            "checks_passed": validation_dict.get("checks_passed", 0),
+            "checks_total": validation_dict.get("checks_total", 0),
+            "warnings": list(validation_dict.get("warnings") or []),
+            "errors": list(validation_dict.get("errors") or []),
+        },
     })
-    if isinstance(validation, dict) and validation:
-        model_validation["validation"] = {
-            "valid": bool(validation.get("valid")),
-            "checks_passed": validation.get("checks_passed", 0),
-            "checks_total": validation.get("checks_total", 0),
-            "warnings": list(validation.get("warnings") or []),
-        }
 
-    # Record provenance honestly instead of asserting an audit that did not happen.
     if len(enriched_obs) < 4:
         enriched_obs.append(
             f"{provenance} — engine '{engine_used}', domain '{domain}', {total_points} simulated points"
         )
-    if len(enriched_obs) < 4 and params:
+    if len(enriched_obs) < 4:
         enriched_obs.append(
-            "Simulation inputs used as supplied (not independently verified): "
-            + ", ".join(f"{k}={v}" for k, v in list(params.items())[:4])
+            f"ScientificValidator: {validation_dict.get('checks_passed', 0)}/{validation_dict.get('checks_total', 0)} checks passed ({validation_dict.get('status')})."
         )
 
-    # Audit log enrichment (records what was computed, not what was validated)
     enriched_log.extend([
-        f"[L4_analysis] Computed descriptive statistics & 95% confidence bounds across {total_points} points",
-        f"[L4_analysis] Output normalized: {len(enriched_num)} metric groups, {len(enriched_plots)} analytical plots",
+        f"[L4_analysis] Computed deterministic descriptive summary across {total_points} simulated points",
+        f"[L4_analysis] Normalized {len(enriched_num)} metric groups and {len(enriched_plots)} analytical plots",
+        f"[L5_validation] ScientificValidator status={validation_dict.get('status')} "
+        f"({validation_dict.get('checks_passed', 0)}/{validation_dict.get('checks_total', 0)} checks passed)",
         f"[L5_provenance] {provenance}",
-        "[L7_review] Assembled SimulationOutput + declarative 3D scene specification for downstream review",
+        f"[L7_output] Assembled validated v2 SimulationOutput contract for domain '{domain}'",
     ])
-    if isinstance(validation, dict):
-        for warning in (validation.get("warnings") or [])[:3]:
-            enriched_log.append(f"[L5_provenance] WARNING: {warning}")
+    for w in (validation_dict.get("warnings") or [])[:5]:
+        enriched_log.append(f"[L5_validation] WARNING: {w}")
+    for err in (validation_dict.get("errors") or [])[:5]:
+        enriched_log.append(f"[L5_validation] ERROR: {err}")
 
     return enriched_num, enriched_plots, enriched_obs, enriched_log
 
 
 def format_output(raw: dict, procedure: dict) -> SimulationOutput:
     """
-    Takes raw engine output dict and wraps it into the
-    typed SimulationOutput schema for downstream consumers.
-    Also runs statistical post-processing and produces a validated 3D scene specification.
+    Validate raw engine output via `ScientificValidator`, generate and validate a
+    synchronized 3D scene specification, and wrap into the v2 `SimulationOutput` schema.
     """
-    plots = []
-    for p in raw.get("plot_data", []):
+    plots: List[PlotData] = []
+    for p in raw.get("plot_data", []) or []:
         try:
-            # Support both numeric and string x labels
             raw_x = p.get("x", [])
             try:
                 x_vals = [float(v) for v in raw_x]
@@ -244,9 +254,8 @@ def format_output(raw: dict, procedure: dict) -> SimulationOutput:
             except (ValueError, TypeError):
                 y_vals = list(raw_y)
 
-            # Parse extra series for multi-line plots
             extra_series = None
-            raw_extra = p.get("extra_series", [])
+            raw_extra = p.get("extra_series") or []
             if raw_extra:
                 extra_series = []
                 for s in raw_extra:
@@ -270,48 +279,159 @@ def format_output(raw: dict, procedure: dict) -> SimulationOutput:
                 series_name=p.get("series_name"),
                 extra_series=extra_series,
             ))
-        except Exception as e:
-            print(f"⚠️  Skipping invalid plot data: {e}")
+        except Exception as exc:
+            print(f"⚠️  Skipping invalid plot data: {exc}")
             continue
 
-    engine_used = raw.get("engine_used", "unknown")
-    raw_num = raw.get("numerical_results", {})
-    raw_obs = raw.get("observations", [])
-    raw_log = raw.get("simulation_log", [])
-    status_value = raw.get("status", "success" if "error" not in raw else "fallback")
-    generation_method = str(raw.get("generation_method") or "")
-    raw_validation = raw.get("validation") if isinstance(raw.get("validation"), dict) else None
+    engine_used = str(raw.get("engine_used", "unknown"))
+    raw_num = raw.get("numerical_results") if isinstance(raw.get("numerical_results"), dict) else {}
+    raw_obs = list(raw.get("observations") or [])
+    raw_log = list(raw.get("simulation_log") or [])
+    generation_method = str(raw.get("generation_method") or raw.get("simulation_type") or "")
 
-    # Generate or retain validated 3D scene specification BEFORE adding statistical plot cards
+    # 1. Resolve canonical experiment_id & expected visualization template
+    exp_id_resolved, expected_template = resolve_visualization_template(procedure, raw)
+    exp_id = str(raw.get("experiment_id") or exp_id_resolved or procedure.get("experiment_type") or "").strip() or None
+    if exp_id:
+        entry = get_experiment_entry(exp_id)
+        if entry:
+            expected_template = entry.visualization_template
+
+    # 2. Run ScientificValidator BEFORE finalizing status & 3D scene
+    validation_summary, validated_status = validate_simulation_result(raw, procedure)
+    checks_total = len(validation_summary.checks)
+    checks_passed = sum(1 for c in validation_summary.checks if c.passed)
+    validation_dict = validation_summary.model_dump()
+    validation_dict.update({
+        "status": validated_status,
+        "passed": bool(validation_summary.overall_valid),
+        "checks_passed": checks_passed,
+        "checks_total": checks_total,
+    })
+
+    raw_status = str(raw.get("simulation_status") or raw.get("status") or "").lower().strip()
+    if raw_status in ("unsupported", "failed"):
+        final_status = raw_status
+    elif validated_status == "validation_failed":
+        final_status = "validation_failed"
+    elif raw_status == "illustrative" or str(raw.get("simulation_type", "")).lower() in ("parametric_model", "parametric_illustrative"):
+        final_status = "illustrative"
+    elif raw_status == "partial" or validated_status == "partial":
+        final_status = "partial"
+    else:
+        final_status = validated_status
+
+    sim_type = str(raw.get("simulation_type") or (
+        "unsupported" if final_status in ("unsupported", "failed")
+        else "parametric_illustrative" if final_status == "illustrative"
+        else "deterministic"
+    ))
+
+    # Collect solver metadata, assumptions, limitations, uncertainties, warnings
+    solver_info = raw.get("solver") if isinstance(raw.get("solver"), dict) else {
+        "name": exp_id or engine_used,
+        "engine": engine_used,
+        "method": generation_method or "deterministic",
+        "equations": [],
+    }
+    assumptions = list(raw.get("assumptions") or [])
+    limitations = list(raw.get("limitations") or [])
+    uncertainties = list(raw.get("uncertainties") or [])
+    warnings = list(raw.get("warnings") or [])
+    for w in validation_summary.warnings:
+        if w not in warnings:
+            warnings.append(w)
+    for err in validation_summary.errors:
+        if err not in warnings:
+            warnings.append(f"Validation error: {err}")
+
+    # 3. Generate & validate synchronized 3D scene specification
     vis_spec = raw.get("visualization_spec")
-    if not vis_spec:
-        try:
-            vis_spec = generate_scene_specification(
-                procedure,
-                raw_num,
-                raw.get("plot_data", [])
-            )
-        except Exception as e:
-            print(f"⚠️  Failed to generate 3D scene specification: {e}")
-            vis_spec = None
+    scene_valid = False
+    scene_issues: List[str] = []
+    scene_reason = ""
 
-    # Enrich L4 statistical metrics & visualizations across all domains
+    if final_status in ("unsupported", "failed"):
+        vis_spec = None
+        scene_reason = f"3D visualization disabled because simulation status is '{final_status}'."
+    else:
+        if not vis_spec:
+            try:
+                vis_spec = generate_scene_specification(
+                    procedure,
+                    raw_num,
+                    raw.get("plot_data", []),
+                    simulation_status=final_status,
+                )
+            except Exception as exc:
+                scene_issues.append(f"3D scene generation failed: {exc}")
+                vis_spec = None
+
+        if vis_spec and validate_scene_specification is not None:
+            try:
+                spec_obj = SceneSpecification(**vis_spec)
+                scene_valid, scene_issues = validate_scene_specification(
+                    spec_obj,
+                    expected_experiment_id=exp_id,
+                    expected_template=expected_template,
+                )
+                if not scene_valid:
+                    warnings.append(
+                        f"3D scene rejected by validator ({'; '.join(scene_issues[:2])}); omitting mismatched scene."
+                    )
+                    scene_reason = "Scene rejected due to template/integrity mismatch."
+                    vis_spec = None
+                else:
+                    vis_spec = spec_obj.model_dump()
+            except Exception as exc:
+                scene_valid = False
+                scene_issues.append(str(exc))
+                warnings.append(f"3D scene validation error: {exc}")
+                vis_spec = None
+        elif vis_spec:
+            scene_valid = True
+
+    visualization_contract = {
+        "template": vis_spec.get("scene_template") if isinstance(vis_spec, dict) else expected_template,
+        "experiment_id": vis_spec.get("experiment_id") if isinstance(vis_spec, dict) else exp_id,
+        "is_simulation_backed": bool(vis_spec.get("is_simulation_backed", False)) if isinstance(vis_spec, dict) else False,
+        "scene_valid": scene_valid,
+        "scene_issues": scene_issues,
+        "reason": scene_reason or ("Validated simulation-backed 3D scene" if scene_valid else "No 3D scene available"),
+    }
+
+    # 4. Deterministic post-processing (NO Student-t CI fabrication!)
     enriched_num, enriched_plots, enriched_obs, enriched_log = _enrich_scientific_analysis(
-        raw_num, plots, raw_obs, raw_log, procedure, engine_used,
-        status=status_value,
+        raw_num,
+        plots,
+        raw_obs,
+        raw_log,
+        procedure,
+        engine_used,
+        status=final_status,
         generation_method=generation_method,
-        validation=raw_validation,
+        validation_dict=validation_dict,
     )
 
     return SimulationOutput(
-        status=status_value,
+        status=final_status,
+        simulation_status=final_status,
+        simulation_type=sim_type,
         engine_used=engine_used,
-        domain=procedure.get("domain", "general"),
-        hypothesis=procedure.get("hypothesis", ""),
+        domain=str(procedure.get("domain", "general")),
+        experiment_id=exp_id,
+        hypothesis=str(procedure.get("hypothesis", "")),
+        solver=solver_info,
         numerical_results=enriched_num,
         plot_data=enriched_plots,
         observations=enriched_obs,
-        confidence_score=float(raw.get("confidence_score", 0.5)),
+        validation=validation_dict,
+        visualization=visualization_contract,
+        assumptions=assumptions,
+        limitations=limitations,
+        uncertainties=uncertainties,
+        warnings=warnings,
+        confidence_score=None,
         simulation_log=enriched_log,
         visualization_type=raw.get("visualization_type", "graph"),
         visual_data=raw.get("visual_data", None),

@@ -1,34 +1,39 @@
 """
-Pydantic schemas for Simulation Agent I/O
+Pydantic schemas for Simulation Agent I/O (v2 Scientific Contract)
 """
 
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
 
-# ── INPUT (from Experiment Architect / Ollama) ──────────────────
+
+# ── INPUT (from Experiment Architect / Prompt Refiner) ──────────────────────
 class ExperimentProcedure(BaseModel):
     """
-    Schema that the Experiment Architect (Ollama/Lemma-3) must output.
-    LangChain will pass this as input to the Simulation Agent.
+    Normalized procedure input to the Simulation Agent.
     """
-    domain: str = Field(..., description="e.g. chemistry, biology, physics, electronics, computer_science, general")
+    domain: str = Field(
+        ...,
+        description="Canonical domain: civil_engineering, mechanical_engineering, physics, chemistry, biology, electronics, computer_science, general",
+    )
     hypothesis: str = Field(..., description="The hypothesis being tested")
-    steps: List[str] = Field(..., description="Step-by-step procedure")
+    steps: List[str] = Field(default_factory=list, description="Step-by-step procedure")
     reagents: Optional[List[Dict[str, Any]]] = Field(
-        default=[], description="[{name, smiles, concentration_M, volume_mL}]"
+        default_factory=list, description="[{name, smiles, concentration_M, volume_mL}]"
     )
     parameters: Dict[str, Any] = Field(
-        default={}, description="Temperature, pH, time, voltage, etc."
+        default_factory=dict, description="Physical or experimental parameters"
     )
     expected_metrics: List[str] = Field(
-        default=[], description="What measurable outcomes are expected"
+        default_factory=list, description="What measurable outcomes are expected"
     )
     experiment_type: Optional[str] = Field(
-        default=None, description="Specific sub-type: pendulum, pcr, titration, arduino_led, model_comparison, etc."
+        default=None,
+        description="Canonical experiment_id from EXPERIMENT_REGISTRY or 'dynamic_custom'",
     )
+    topic: Optional[str] = Field(default=None, description="Original topic string")
 
 
-# ── OUTPUT (to Analysis Agent / Layer 4) ────────────────────────
+# ── OUTPUT (to Analysis Agent / Backend API / Frontend) ─────────────────────
 
 class SeriesData(BaseModel):
     """Additional data series for multi-line plots."""
@@ -36,30 +41,43 @@ class SeriesData(BaseModel):
     name: str
     color: Optional[str] = None
 
+
 class PlotData(BaseModel):
     """Represents a static 2D simulation plot."""
-    plot_type: str          # "line", "bar", "scatter", "heatmap" (2D only)
+    plot_type: str          # "line", "bar", "scatter", "heatmap"
     title: str
     x_label: str
     y_label: str
-    x: List[Any]            # 1D array for x-axis. Supports both numeric and string labels
-    y: List[Any]            # 1D array for y-axis.
+    x: List[Any]
+    y: List[Any]
     series_name: Optional[str] = None
-    extra_series: Optional[List[SeriesData]] = None   # Multi-series support
+    extra_series: Optional[List[SeriesData]] = None
+
 
 class SimulationOutput(BaseModel):
     """
-    Normalized output from Simulation Agent → can feed into Analysis Agent.
+    Normalized, scientifically validated output from the Simulation Agent.
+    Never fabricates arbitrary confidence scores or statistical CIs over deterministic trajectories.
     """
-    status: str                          # "success" | "fallback" | "failed"
-    engine_used: str                     # "chem_sim" | "bio_sim" | "physics_sim" | "electronics_sim" | "cs_sim" | "llm_fallback"
+    status: str                                        # "success" | "partial" | "validation_failed" | "unsupported" | "failed" | "illustrative"
+    simulation_status: str = "success"                 # Canonical scientific status matching status
+    simulation_type: str = "deterministic"             # "deterministic" | "analytical" | "ode" | "algorithmic" | "parametric_illustrative" | "unsupported"
+    engine_used: str                                   # "chem_sim" | "bio_sim" | "physics_sim" | "electronics_sim" | "civil_sim" | "mech_sim" | "cs_sim" | "llm_fallback"
     domain: str
+    experiment_id: Optional[str] = None                # Canonical registered experiment_id
     hypothesis: str
-    numerical_results: Dict[str, Any]    # All measurable numeric outputs
-    plot_data: List[PlotData]            # Ready-to-render graph data
-    observations: List[str]              # Qualitative findings
-    confidence_score: float              # 0.0 → 1.0
-    simulation_log: List[str]            # Step-by-step trace for audit
-    visualization_type: str = "graph"   # "graph" | "circuit" | "architecture"
-    visual_data: Optional[Dict[str, Any]] = None  # Circuit/architecture layout for interactive rendering
-    visualization_spec: Optional[Dict[str, Any]] = None  # Validated declarative 3D scene specification
+    solver: Optional[Dict[str, Any]] = None            # {name, version, method, equations, library}
+    numerical_results: Dict[str, Any]                  # All measurable numeric outputs
+    plot_data: List[PlotData]                          # Ready-to-render 2D graph data
+    observations: List[str]                            # Qualitative & quantitative findings
+    validation: Optional[Dict[str, Any]] = None        # ScientificValidator summary & checks
+    visualization: Optional[Dict[str, Any]] = None     # VisualizationContract (template, is_simulation_backed, scene_valid, issues)
+    assumptions: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+    uncertainties: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    confidence_score: Optional[float] = None           # Explicitly None unless objectively derived; NEVER hardcoded
+    simulation_log: List[str] = Field(default_factory=list)
+    visualization_type: str = "graph"                  # "graph" | "circuit" | "blueprint" | "algorithm" | "3d_model" | "sample_testing"
+    visual_data: Optional[Dict[str, Any]] = None
+    visualization_spec: Optional[Dict[str, Any]] = None

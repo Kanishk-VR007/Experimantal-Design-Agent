@@ -88,12 +88,12 @@ function SimulationResults({ simulation, onSimulationUpdated }) {
   })
 
   const confidenceColor =
-    confidence_score >= 0.8 ? '#10b981' :
-    confidence_score >= 0.6 ? '#f59e0b' : '#ef4444'
+    (confidence_score ?? 0) >= 0.8 ? '#10b981' :
+    (confidence_score ?? 0) >= 0.6 ? '#f59e0b' : '#ef4444'
 
   const domainIcon = {
     electronics: '⚡', circuit: '⚡', arduino: '⚡',
-    chemistry: '🧪', physics: '⚛',
+    chemistry: '🧪', physics: '⚛', biology: '🧬',
     computer_science: '🤖', cs: '🤖', machine_learning: '🤖',
     civil_engineering: '🏗', civil: '🏗', structural: '🏗',
     mechanical_engineering: '⚙️', mechanical: '⚙️', mech: '⚙️',
@@ -119,21 +119,36 @@ function SimulationResults({ simulation, onSimulationUpdated }) {
         <p>{hypothesis}</p>
       </div>
 
-      {/* Confidence Score */}
-      <div className="sim-section confidence-section">
-        <h3>📊 Confidence Score</h3>
-        <div className="confidence-bar-container">
-          <div className="confidence-bar"
-            style={{ width: `${confidence_score * 100}%`, backgroundColor: confidenceColor }}>
-            <span className="confidence-value">{(confidence_score * 100).toFixed(0)}%</span>
-          </div>
+      {/* Scientific Validation Summary (replaces arbitrary confidence bar when confidence_score is null) */}
+      {currentSim.validation ? (
+        <div className="sim-section confidence-section">
+          <h3>✅ Scientific Validation ({currentSim.validation.status || status})</h3>
+          <p className="confidence-description">
+            Passed {currentSim.validation.checks_passed ?? 0} of {currentSim.validation.checks_total ?? 0} physical/mathematical checks
+            {currentSim.solver?.method ? ` — ${currentSim.solver.method}` : ''}.
+          </p>
+          {currentSim.warnings && currentSim.warnings.length > 0 && (
+            <p className="confidence-description" style={{ color: '#fbbf24' }}>
+              ⚠️ {currentSim.warnings.join(' • ')}
+            </p>
+          )}
         </div>
-        <p className="confidence-description">
-          {confidence_score >= 0.8 ? 'High confidence — results are reliable' :
-           confidence_score >= 0.6 ? 'Moderate confidence — review assumptions' :
-           'Low confidence — consider experimental validation'}
-        </p>
-      </div>
+      ) : confidence_score != null ? (
+        <div className="sim-section confidence-section">
+          <h3>📊 Confidence Score</h3>
+          <div className="confidence-bar-container">
+            <div className="confidence-bar"
+              style={{ width: `${confidence_score * 100}%`, backgroundColor: confidenceColor }}>
+              <span className="confidence-value">{(confidence_score * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <p className="confidence-description">
+            {confidence_score >= 0.8 ? 'High confidence — results are reliable' :
+             confidence_score >= 0.6 ? 'Moderate confidence — review assumptions' :
+             'Low confidence — consider experimental validation'}
+          </p>
+        </div>
+      ) : null}
 
       {/* ── Interactive 3D Scientific Visualization Engine ── */}
       {visualization_spec && (

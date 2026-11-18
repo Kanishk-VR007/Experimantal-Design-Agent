@@ -123,13 +123,13 @@ class VisualizationPipeline:
         _log_progress("unloading_refiner", "Unloading Qwen 4B Thinking to free GPU memory...")
         await model_manager.unload_all_models()
 
-        # ── STAGE 4: Load Qwen3-VL-2B & Analyze Reference Image ──
-        _log_progress("loading_vision_model", "Sequentially loading Qwen3-VL-2B-Instruct into LM Studio...")
+        # ── STAGE 4: Load Qwen3-VL-4B-Thinking & Analyze Reference Image ──
+        _log_progress("loading_vision_model", f"Sequentially loading {VISION_MODEL_KEY} into LM Studio...")
         visual_instructions: VisualReconstructionInstructions
 
         try:
             if img_bytes_cache and selected_ref:
-                _log_progress("analyzing_image", "Qwen3-VL analyzing visual structure, joints, and component layout...")
+                _log_progress("analyzing_image", f"{VISION_MODEL_KEY} analyzing visual structure, joints, and component layout...")
                 visual_instructions = await vision_service.analyze_reference_image(
                     refined=refined_output,
                     reference=selected_ref,
@@ -149,7 +149,7 @@ class VisualizationPipeline:
                 del img_bytes_cache
                 img_bytes_cache = None
             _log_progress("releasing_image_buffers", "In-memory image buffers strictly purged from RAM.")
-            _log_progress("unloading_vision_model", "Unloading Qwen3-VL-2B from LM Studio...")
+            _log_progress("unloading_vision_model", f"Unloading {VISION_MODEL_KEY} from LM Studio...")
             await model_manager.unload_all_models()
 
         _log_progress(
@@ -160,28 +160,46 @@ class VisualizationPipeline:
 
         # ── STAGE 6: Execute Deterministic Numerical Simulation ──
         _log_progress("running_simulation", f"Executing deterministic simulation engine for domain '{refined_output.domain}'...")
-        sim_result = run_simulation(
-            topic=refined_output.refined_experiment_prompt,
-            design=refined_output.refined_experiment_prompt,
-            domain=refined_output.domain,
-            refinement=refined_output.model_dump(),
-        )
+        sim_result = run_simulation({
+            "topic": refined_output.refined_experiment_prompt,
+            "design": refined_output.refined_experiment_prompt,
+            "domain": refined_output.domain,
+            "experiment_type": refined_output.experiment_type,
+            "parameters": dict(refined_output.parameters or {}),
+            "refinement": refined_output.model_dump(),
+        })
 
         numerical_results = sim_result.get("numerical_results", {})
         plot_data = sim_result.get("plot_data", [])
-        procedure = sim_result.get("procedure", {})
-        procedure["domain"] = refined_output.domain
-        procedure["experiment_type"] = refined_output.experiment_type
-        procedure["refined_prompt"] = refined_output.refined_experiment_prompt
-        procedure["parameters"] = {**numerical_results.get("parameters", {}), **refined_output.parameters}
+        procedure = {
+            "domain": sim_result.get("domain") or refined_output.domain,
+            "experiment_type": sim_result.get("experiment_id") or refined_output.experiment_type,
+            "hypothesis": sim_result.get("hypothesis") or refined_output.refined_experiment_prompt,
+            "refined_prompt": refined_output.refined_experiment_prompt,
+            "parameters": {**numerical_results.get("parameters", {}), **refined_output.parameters},
+        }
 
-        # ── STAGE 7: Load DeepSeek R1 7B & Synthesize 3D Scene Specification ──
-        _log_progress("loading_main_model", "Sequentially loading OREAL DeepSeek R1 Distill Qwen 7B for 3D scene generation...")
+        # ── STAGE 7: Load Main Reasoner (DeepSeek-R1-0528-Qwen3-8B, reasoning-only) & Synthesize 3D Scene Specification ──
+        _log_progress("loading_main_model", f"Sequentially loading {MAIN_MODEL_KEY} (reasoning-only)...")
         await model_manager.load_model(MAIN_MODEL_KEY)
 
         _log_progress("synthesizing_scene", "Synthesizing declarative 3D scene matching simulation constraints...")
-        # Build base scene from domain template
-        raw_scene_dict = generate_scene_specification(procedure, numerical_results, plot_data)
+        raw_scene_dict = sim_result.get("visualization_spec") or generate_scene_specification(
+            procedure, numerical_results, plot_data, simulation_status=sim_result.get("simulation_status")
+        )
+        if not raw_scene_dict:
+            return {
+                "success": False,
+                "total_duration_s": round(time.time() - t0, 2),
+                "simulation_status": sim_result.get("simulation_status", "unsupported"),
+                "scene_specification": None,
+                "refined_prompt": refined_output.model_dump(),
+                "visual_reconstruction_instructions": visual_instructions.model_dump(),
+                "selected_reference": selected_ref.model_dump() if selected_ref else None,
+                "simulation_results": sim_result,
+                "timeline_events": timeline_events,
+                "validation": {"is_valid": False, "notices": ["No validated 3D scene for unsupported/failed simulation."]},
+            }
         scene_spec = SceneSpecification.model_validate(raw_scene_dict)
 
         # Augment with visual reconstruction instructions and reference attribution
