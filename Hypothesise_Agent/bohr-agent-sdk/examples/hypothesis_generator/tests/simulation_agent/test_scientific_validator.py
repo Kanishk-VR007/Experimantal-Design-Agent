@@ -61,3 +61,4 @@ def test_validator_catches_unsorted_array_output():
     summary, status = validate_simulation_result(raw, {"domain": "computer_science", "experiment_type": "quick_sort"})
     assert summary.overall_valid is False
     assert status == "validation_failed"
+

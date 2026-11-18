@@ -119,6 +119,37 @@ def test_regression_12_unsupported_experiment_honest_no_fabrication():
     assert out["confidence_score"] is None
 
 
+def test_regression_13_llm_generated_equations_never_bypass_scientific_validation():
+    """Part 12 Regression 12: LLM-generated equation/dynamic outputs MUST pass through ScientificValidator."""
+    from simulation_agent.output_formatter import format_output
+
+    # Simulated LLM-generated dynamic output containing a NaN value
+    corrupted_dynamic_raw = {
+        "status": "success",
+        "engine_used": "dynamic_equation_engine",
+        "generation_method": "equation_model",
+        "numerical_results": {"primary_metrics": {"peak_value": float("nan")}},
+        "plot_data": [
+            {
+                "plot_type": "line",
+                "title": "LLM Synthesized Curve",
+                "x_label": "x",
+                "y_label": "y",
+                "x": [0.0, 1.0, 2.0, 3.0],
+                "y": [0.0, float("nan"), 2.0, 3.0],
+            }
+        ],
+        "observations": ["Synthesized curve"],
+    }
+    formatted = format_output(
+        corrupted_dynamic_raw,
+        {"domain": "physics", "experiment_type": "dynamic_custom", "hypothesis": "Test LLM validation"},
+    ).model_dump()
+    assert formatted["simulation_status"] == "validation_failed"
+    assert formatted["validation"]["passed"] is False
+    assert formatted["confidence_score"] is None
+
+
 def test_lm_studio_three_model_exact_keys_and_policies():
     assert PROMPT_REFINER_MODEL_KEY == "qwen/qwen3-4b-thinking-2507"
     assert VISION_MODEL_KEY == "qwen3-vl-4b-thinking"
@@ -127,3 +158,4 @@ def test_lm_studio_three_model_exact_keys_and_policies():
     assert ROLE_CONFIG["vision_analyzer"]["requires_vision"] is True
     assert ROLE_CONFIG["main_reasoner"]["reasoning_only"] is True
     assert ROLE_CONFIG["main_reasoner"]["supports_tools"] is False
+

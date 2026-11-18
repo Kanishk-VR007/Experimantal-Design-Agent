@@ -1,9 +1,9 @@
 """
-Qwen3-VL-2B Image Analysis Service
-==================================
-Executes Stage 2 of the Multi-Model Pipeline:
+Qwen3-VL-4B-Thinking Image Analysis Service (`vision_analyzer` role)
+====================================================================
+Executes Stage B of the Multi-Model Pipeline:
   1. Receives in-memory RAM image bytes (strictly non-persistent).
-  2. Sequentially loads Qwen3-VL-2B-Instruct into LM Studio.
+  2. Sequentially loads `vision_analyzer` (Qwen3-VL-4B-Thinking) into LM Studio.
   3. Formats OpenAI-compatible multimodal chat request.
   4. Extracts component objects, 3D geometry types, joints, connections, and animation cues.
   5. Enforces scientific uncertainty principles (visual estimates != verified measurements).
@@ -25,7 +25,8 @@ from backend.visualization.visual_description_schema import (
     SceneComposition,
 )
 from backend.visualization.prompt_schema import RefinedPromptOutput, ReferenceItem
-from backend.services.local_model_manager import model_manager, VISION_MODEL_KEY
+from backend.services.local_model_manager import model_manager
+from backend.services.model_registry import model_registry
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ LM_STUDIO_OPENAI_BASE = os.getenv("LM_STUDIO_OPENAI_BASE_URL", "http://localhost
 
 class VisionService:
     """
-    Multimodal visual feature extraction using Qwen3-VL-2B.
+    Multimodal visual feature extraction using `vision_analyzer` (Qwen3-VL-4B-Thinking).
     """
 
     async def analyze_reference_image(
@@ -46,71 +47,82 @@ class VisionService:
         timeout: int = 45,
     ) -> VisualReconstructionInstructions:
         """
-        Analyze in-memory reference image with Qwen3-VL-2B:
-          1. Sequential switch to Qwen3-VL-2B in LM Studio.
+        Analyze in-memory reference image with `vision_analyzer` (Qwen3-VL-4B-Thinking):
+          1. Sequential switch to `vision_analyzer` in LM Studio.
           2. Execute vision inference.
           3. Parse and validate VisualReconstructionInstructions.
-          4. Delete base64 payload from memory.
+          4. Delete base64 payload and buffers from memory in `finally`.
         """
-        # Ensure Vision Model is loaded in LM Studio
-        await model_manager.load_model(VISION_MODEL_KEY)
+        if not image_bytes:
+            raise ValueError("Cannot invoke vision_analyzer with empty or missing image bytes.")
 
-        # Temporary in-memory base64 string
-        b64_str = base64.b64encode(image_bytes).decode("ascii")
-        data_uri = f"data:{mime_type};base64,{b64_str}"
-
-        system_instruction = (
-            "You are a Scientific Visualization & Mechanical/Structural Decomposition Expert. "
-            "Analyze the provided technical reference image for an experiment. "
-            "Extract: "
-            "1. 'scene_composition': {camera_view (e.g. three_quarter, elevation, top_down), coordinate_system, layout} "
-            "2. 'objects': array of {id, name, geometry (cylinder, elongated_cuboid, sphere, box, gear, wire, beam, node), relative_position, orientation, material, confidence} "
-            "3. 'connections': array of {source, target, type (revolute_joint, fixed_joint, sliding_joint, gear_mesh, wire_lead, structural_support, directed_edge)} "
-            "4. 'visual_instructions': array of concrete directives for assembling the 3D scene. "
-            "5. 'animation_hints': array of motion/rotation/translation cues. "
-            "6. 'uncertainties': array of visual ambiguities, hidden parts, or unmeasured physical dimensions. "
-            "Output strictly valid JSON with keys: domain, scene_type, scene_composition, objects, connections, visual_instructions, animation_hints, uncertainties."
-        )
-
-        user_text = (
-            f"Experiment Domain: {refined.domain}\n"
-            f"Experiment Type: {refined.experiment_type}\n"
-            f"Refined Objective: {refined.refined_experiment_prompt}\n"
-            f"Target Apparatus: {', '.join(refined.apparatus)}\n\n"
-            "Analyze this reference image and output the complete 3D visual reconstruction instructions in JSON format."
-        )
-
-        payload = {
-            "model": VISION_MODEL_KEY,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"{system_instruction}\n\n{user_text}"},
-                        {"type": "image_url", "image_url": {"url": data_uri}},
-                    ],
-                }
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1000,
-        }
-
-        url = f"{LM_STUDIO_OPENAI_BASE}/chat/completions"
+        vision_model_id = model_registry.get_model_id("vision_analyzer")
+        b64_str: Optional[str] = None
+        data_uri: Optional[str] = None
+        payload: Optional[Dict[str, Any]] = None
         raw_response_text = ""
+
         try:
+            loaded = await model_manager.load_role("vision_analyzer")
+            if not loaded:
+                raise RuntimeError(
+                    model_manager.last_load_error or f"Failed to load vision_analyzer model '{vision_model_id}'."
+                )
+
+            b64_str = base64.b64encode(image_bytes).decode("ascii")
+            data_uri = f"data:{mime_type};base64,{b64_str}"
+
+            system_instruction = (
+                "You are a Scientific Visualization & Mechanical/Structural Decomposition Expert. "
+                "Analyze the provided technical reference image for an experiment. "
+                "Extract: "
+                "1. 'scene_composition': {camera_view (e.g. three_quarter, elevation, top_down), coordinate_system, layout} "
+                "2. 'objects': array of {id, name, geometry (cylinder, elongated_cuboid, sphere, box, gear, wire, beam, node), relative_position, orientation, material, confidence} "
+                "3. 'connections': array of {source, target, type (revolute_joint, fixed_joint, sliding_joint, gear_mesh, wire_lead, structural_support, directed_edge)} "
+                "4. 'visual_instructions': array of concrete directives for assembling the 3D scene. "
+                "5. 'animation_hints': array of motion/rotation/translation cues. "
+                "6. 'uncertainties': array of visual ambiguities, hidden parts, or unmeasured physical dimensions. "
+                "Output strictly valid JSON with keys: domain, scene_type, scene_composition, objects, connections, visual_instructions, animation_hints, uncertainties."
+            )
+
+            user_text = (
+                f"Experiment Domain: {refined.domain}\n"
+                f"Experiment Type: {refined.experiment_type}\n"
+                f"Refined Objective: {refined.refined_experiment_prompt}\n"
+                f"Target Apparatus: {', '.join(refined.apparatus)}\n\n"
+                "Analyze this reference image and output the complete 3D visual reconstruction instructions in JSON format."
+            )
+
+            payload = {
+                "model": vision_model_id,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"{system_instruction}\n\n{user_text}"},
+                            {"type": "image_url", "image_url": {"url": data_uri}},
+                        ],
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1000,
+            }
+
+            url = f"{LM_STUDIO_OPENAI_BASE}/chat/completions"
             resp = requests.post(url, json=payload, timeout=timeout)
             if resp.status_code == 200:
                 data = resp.json()
                 raw_response_text = data["choices"][0]["message"].get("content", "")
             else:
-                logger.warning("[VisionService] Qwen3-VL returned HTTP %s: %s", resp.status_code, resp.text[:200])
+                logger.warning("[VisionService] vision_analyzer returned HTTP %s: %s", resp.status_code, resp.text[:200])
         except Exception as e:
-            logger.error("[VisionService] Error during Qwen3-VL call: %s", e)
+            logger.error("[VisionService] Error during vision_analyzer call: %s", e)
+            raise
         finally:
-            # Strictly erase in-memory data URI and base64 strings
-            del b64_str
-            del data_uri
-            del payload
+            # Strictly erase in-memory data URI and base64 strings even on failure paths
+            b64_str = None
+            data_uri = None
+            payload = None
 
         return self._parse_vision_response(raw_response_text, refined, reference)
 

@@ -77,3 +77,4 @@ def test_missing_required_parameters_return_honest_failed():
     assert res["status"] == "failed"
     assert res["plot_data"] == []
     assert "Missing required parameter" in " ".join(res.get("observations", []))
+

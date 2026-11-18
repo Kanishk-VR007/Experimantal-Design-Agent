@@ -15,11 +15,11 @@ from typing import List, Dict, Any, Optional
 import requests
 
 from backend.visualization.prompt_schema import ReferenceItem, SearchSelectionResult, RefinedPromptOutput
+from backend.services.model_registry import model_registry
 
 logger = logging.getLogger(__name__)
 
 LM_STUDIO_OPENAI_BASE = os.getenv("LM_STUDIO_OPENAI_BASE_URL", "http://localhost:1234/v1").rstrip("/")
-PROMPT_REFINER_MODEL_KEY = os.getenv("PROMPT_REFINER_MODEL", "qwen/qwen3-4b-thinking-2507").strip()
 
 
 def select_best_reference_with_qwen(
@@ -81,7 +81,7 @@ def select_best_reference_with_qwen(
     )
 
     payload = {
-        "model": PROMPT_REFINER_MODEL_KEY,
+        "model": model_registry.get_model_id("prompt_refiner"),
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

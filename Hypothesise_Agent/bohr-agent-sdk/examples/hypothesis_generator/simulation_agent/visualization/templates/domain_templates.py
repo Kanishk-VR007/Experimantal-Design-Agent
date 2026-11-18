@@ -606,3 +606,4 @@ def build_building_scene(procedure: Dict[str, Any], numerical_results: Dict[str,
         camera=CameraConfig(position=[w * 1.1, floors * fh * 1.1, d * 1.8], target=[0.0, floors * fh * 0.4, 0.0], fov=48),
         objects=objects,
     )
+

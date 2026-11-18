@@ -578,3 +578,4 @@ class ExperimentResultContract(BaseModel):
     limitations: List[str] = Field(default_factory=list)
     uncertainties: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
+

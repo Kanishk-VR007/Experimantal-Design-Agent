@@ -59,3 +59,4 @@ All values below were measured directly by executing the upgraded deterministic 
 - All built-in solvers are 1D/2D deterministic analytical, ODE, linear-algebra (2D truss DSM), or instrumented discrete-algorithm models within documented assumptions (e.g. Euler-Bernoulli small-deflection beams, ideal dilute aqueous solutions at 298.15 K, ideal passive RLC elements, planar rigid-body mechanisms).
 - ML comparison experiments (`model_comparison`, `dropout_effect`, `neural_network_training`) remain deterministic parametric learning-curve surrogates and are explicitly labeled `illustrative` / non-empirical.
 - Arbitrary 3D FEA, CFD, quantum field theory, or nonlinear transient multi-body dynamics are outside the built-in registry and are transparently reported as `unsupported`.
+

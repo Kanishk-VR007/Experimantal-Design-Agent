@@ -67,3 +67,4 @@ def test_scene_validator_rejects_mismatched_template():
     ok, issues = validate_scene_specification(SceneSpecification(**s_rlc), expected_experiment_id="pendulum", expected_template="simple_pendulum")
     assert ok is False
     assert any("mismatch" in i.lower() for i in issues)
+

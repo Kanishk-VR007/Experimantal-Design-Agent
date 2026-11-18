@@ -6,7 +6,7 @@ Lifecycle:
   1. Retrieve accessible image URL via HTTP/HTTPS into memory buffer (`io.BytesIO`).
   2. Perform SSRF checks (blocks private IPs, localhost, AWS metadata, loopback).
   3. Validate MIME type (`image/jpeg`, `image/png`, `image/webp`), size <= 5MB, resolution <= 1600x1600.
-  4. Provide in-memory base64 or PIL Image to Qwen3-VL-2B.
+  4. Provide in-memory base64 or PIL Image to Qwen3-VL-4B-Thinking (`vision_analyzer`).
   5. Strictly release buffers on completion or error in `finally` block.
   6. Zero disk writes, zero DB storage, zero base64 data logged.
 """

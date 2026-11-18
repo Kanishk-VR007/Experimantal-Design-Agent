@@ -19,7 +19,8 @@ import requests
 from backend.visualization.prompt_schema import RefinedPromptOutput, DomainLiteral
 from backend.services.free_web_search_service import free_search_service
 from backend.services.reference_selection_service import select_best_reference_with_qwen
-from backend.services.local_model_manager import model_manager, PROMPT_REFINER_MODEL_KEY
+from backend.services.local_model_manager import model_manager
+from backend.services.model_registry import model_registry
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +110,9 @@ class PromptRefinerService:
         """
         filtered_text, search_terms = intelligent_stop_word_filter(raw_prompt)
 
-        # Ensure Qwen 4B Thinking is active in LM Studio
-        await model_manager.load_model(PROMPT_REFINER_MODEL_KEY)
+        # Ensure Qwen3-4B-Thinking (`prompt_refiner`) is active in LM Studio via model_registry
+        refiner_model_id = model_registry.get_model_id("prompt_refiner")
+        await model_manager.load_role("prompt_refiner")
 
         system_msg = (
             "You are a Senior Scientific Prompt Refinement & Experimental Apparatus Identification Agent. "
@@ -132,7 +134,7 @@ class PromptRefinerService:
         )
 
         payload = {
-            "model": PROMPT_REFINER_MODEL_KEY,
+            "model": refiner_model_id,
             "messages": [
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": user_msg},

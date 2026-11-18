@@ -232,8 +232,13 @@ def check_refiner_status() -> Dict[str, Any]:
     except Exception:
         pass
 
-    # Fallback to Ollama if LM Studio is offline
-    return check_ollama_status()
+    return {
+        "available": False,
+        "server_reachable": False,
+        "provider": "lmstudio",
+        "active_model": refiner_model,
+        "models": [],
+    }
 
 
 def check_ollama_status() -> Dict[str, Any]:
@@ -265,22 +270,11 @@ def check_ollama_status() -> Dict[str, Any]:
 
 
 def check_llm_health() -> Dict[str, Any]:
-    """Check configured primary LLM provider (LM Studio first, Ollama fallback)."""
+    """Check configured LM Studio primary LLM provider (no silent Ollama substitution)."""
     cfg = get_llm_config()
     if cfg["provider"] == "ollama":
-        ol = check_ollama_status()
-        if ol["available"]:
-            return ol
-        lm = check_lmstudio_status()
-        return lm if lm["available"] else ol
-
-    lm = check_lmstudio_status()
-    if lm["available"]:
-        return lm
-    ol = check_ollama_status()
-    if ol["available"]:
-        return ol
-    return lm
+        return check_ollama_status()
+    return check_lmstudio_status()
 
 
 # ─── Retry / truncation policy ───────────────────────────────────────────
@@ -528,19 +522,9 @@ def stream_chat_completion(
         resp = _connect_with_retry(
             provider, model, messages, temperature, max_tokens, timeout, stop, cfg
         )
-    except RuntimeError as primary_error:
-        # Second failure on the primary provider: try the alternative if reachable.
-        fallback = _alternate_provider(primary_provider, cfg)
-        if not fallback:
-            raise
-        provider, model = fallback["provider"], fallback["model"]
-        logger.warning(
-            "[llm_client] %s failed after %d attempt(s) (%s) — falling back to %s:%s",
-            primary_provider, RETRY_ATTEMPTS, primary_error, provider, model,
-        )
-        resp = _connect_with_retry(
-            provider, model, messages, temperature, max_tokens, timeout, stop, cfg, attempts=1
-        )
+    except RuntimeError:
+        # Strict LM Studio policy: do NOT silently fall back to Ollama for the 3 local LM Studio models
+        raise
 
     if provider != primary_provider or model != primary_model:
         # Tell consumers (and the UI) that the active model actually changed.

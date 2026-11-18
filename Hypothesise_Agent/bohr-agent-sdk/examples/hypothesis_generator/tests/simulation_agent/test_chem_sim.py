@@ -74,3 +74,4 @@ def test_chemical_equilibrium_mass_action_residual():
     ce = res["numerical_results"]["chemical_equilibrium"]
     assert ce["mass_action_residual"] < 1e-4
     assert ce["mass_balance_error_M"] < 1e-6
+

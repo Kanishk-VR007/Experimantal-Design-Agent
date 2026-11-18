@@ -152,3 +152,4 @@
 8. **Mechanical Solvers (Spring-Mass-Damper, Rotational Dynamics, Separate Carnot/Otto/Diesel/Brayton cycles)** — incomplete in `mech_sim.py`.
 9. **Chemistry Equilibrium & Accurate 4-Regime Titration Solver** — broken/missing in `chem_sim.py`.
 10. **Biology Exponential Growth & Explicit Parameter Validation** — incomplete in `bio_sim.py`.
+

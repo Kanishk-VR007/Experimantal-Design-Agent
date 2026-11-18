@@ -37,3 +37,4 @@ def test_output_formatter_unsupported_preserves_empty_plots_and_no_scene():
     assert data["plot_data"] == []
     assert data["visualization_spec"] is None
     assert data["confidence_score"] is None
+

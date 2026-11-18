@@ -1,5 +1,5 @@
 """
-Pydantic Schema for Visual Reconstruction Instructions (Qwen3-VL-2B Output)
+Pydantic Schema for Visual Reconstruction Instructions (Qwen3-VL-4B-Thinking Output)
 ============================================================================
 Defines the visual structure, spatial relationships, component hierarchy,
 joints, connections, and animation hints extracted from the reference image.

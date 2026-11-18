@@ -356,3 +356,4 @@ _validator = ScientificValidator()
 def validate_simulation_result(raw_result: Dict[str, Any], procedure: Dict[str, Any]) -> Tuple[ValidationSummary, str]:
     """Convenience entrypoint for validating any simulation result."""
     return _validator.validate(raw_result, procedure)
+

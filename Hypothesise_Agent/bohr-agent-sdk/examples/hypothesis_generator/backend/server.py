@@ -324,6 +324,13 @@ async def health_check():
     }
 
 
+@app.get("/api/models/status")
+async def models_status():
+    """Diagnostic LM Studio 3-model role registry & sequential residency status (Part 10.5)."""
+    from backend.services.local_model_manager import model_manager
+    return model_manager.get_diagnostic_status()
+
+
 @app.post("/api/search-papers")
 async def search_papers(request: ExperimentRequest):
     """Search for research papers"""
