@@ -449,13 +449,27 @@ def run_simulation(design_output: dict) -> dict:
     if user_domain:
         procedure_dict["domain"] = normalize_domain_key(user_domain)
 
-    # Allow explicit caller overrides passed directly on design_output (e.g. experiment_type, parameters)
+    # Allow explicit caller overrides only when they resolve to a registered experiment (or dynamic_custom)
     if design_output.get("experiment_type"):
-        procedure_dict["experiment_type"] = str(design_output["experiment_type"]).strip().lower()
+        caller_type = str(design_output["experiment_type"]).strip().lower()
+        if caller_type == "dynamic_custom":
+            procedure_dict["experiment_type"] = "dynamic_custom"
+        else:
+            _, resolved_caller, _ = classify_experiment(
+                topic=topic or "",
+                design_text=design_text or "",
+                user_domain=procedure_dict["domain"],
+                explicit_experiment_type=caller_type,
+                parameters=procedure_dict.get("parameters") or {},
+            )
+            if resolved_caller:
+                procedure_dict["experiment_type"] = resolved_caller
+            elif not procedure_dict.get("experiment_type"):
+                procedure_dict["experiment_type"] = caller_type
     if isinstance(design_output.get("parameters"), dict):
         procedure_dict["parameters"].update(design_output["parameters"])
 
-    # Apply validated prompt-refiner overrides
+    # Apply validated prompt-refiner overrides (never clobber a valid canonical ID with an unregistered LLM slug)
     if isinstance(refinement, dict) and refinement:
         ref_domain = str(refinement.get("domain", "")).lower().strip()
         if procedure_dict.get("domain") == "general" and ref_domain and ref_domain != "general":
@@ -464,7 +478,6 @@ def run_simulation(design_output: dict) -> dict:
         ref_type = refinement.get("experiment_type")
         if isinstance(ref_type, str) and ref_type.strip():
             refined_type = ref_type.strip().lower()
-            # Resolve through registry if it's an alias
             _, resolved, _ = classify_experiment(
                 topic=topic or "",
                 design_text=design_text or "",
@@ -472,7 +485,10 @@ def run_simulation(design_output: dict) -> dict:
                 explicit_experiment_type=refined_type,
                 parameters=procedure_dict.get("parameters") or {},
             )
-            procedure_dict["experiment_type"] = resolved or refined_type
+            if resolved:
+                procedure_dict["experiment_type"] = resolved
+            elif not procedure_dict.get("experiment_type") and refined_type == "dynamic_custom":
+                procedure_dict["experiment_type"] = "dynamic_custom"
 
         ref_params = refinement.get("parameters")
         if isinstance(ref_params, dict):

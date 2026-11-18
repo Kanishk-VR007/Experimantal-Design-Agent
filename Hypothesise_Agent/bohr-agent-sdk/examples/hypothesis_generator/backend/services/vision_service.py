@@ -108,9 +108,11 @@ class VisionService:
                 "max_tokens": 1000,
             }
 
+            import asyncio
             url = f"{LM_STUDIO_OPENAI_BASE}/chat/completions"
-            resp = requests.post(url, json=payload, timeout=timeout)
+            resp = await asyncio.to_thread(requests.post, url, json=payload, timeout=timeout)
             if resp.status_code == 200:
+                resp.encoding = "utf-8"
                 data = resp.json()
                 raw_response_text = data["choices"][0]["message"].get("content", "")
             else:

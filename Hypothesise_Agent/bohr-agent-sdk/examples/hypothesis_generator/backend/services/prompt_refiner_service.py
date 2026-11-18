@@ -147,26 +147,32 @@ class PromptRefinerService:
         }
 
         url = f"{LM_STUDIO_OPENAI_BASE}/chat/completions"
-        content_parts = []
-        try:
-            resp = requests.post(url, json=payload, stream=True, timeout=timeout)
-            if resp.status_code == 200:
-                for line in resp.iter_lines(decode_unicode=True):
-                    if line and line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data_str)
-                            c = chunk["choices"][0]["delta"].get("content")
-                            if c:
-                                content_parts.append(c)
-                        except Exception:
-                            pass
-        except Exception as e:
-            logger.warning("[PromptRefinerService] Qwen 4B HTTP call error: %s", e)
 
-        raw_tail = "".join(content_parts).strip()
+        def _call_refiner_http() -> str:
+            parts: List[str] = []
+            try:
+                resp = requests.post(url, json=payload, stream=True, timeout=timeout)
+                if resp.status_code == 200:
+                    resp.encoding = "utf-8"
+                    for line in resp.iter_lines(decode_unicode=True):
+                        if line and line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                c = chunk["choices"][0]["delta"].get("content")
+                                if c:
+                                    parts.append(c)
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.warning("[PromptRefinerService] Qwen3-4B HTTP call error: %s", e)
+            return "".join(parts).strip()
+
+        import asyncio
+        from simulation_agent.llm_client import strip_thinking_tags
+        raw_tail = strip_thinking_tags(await asyncio.to_thread(_call_refiner_http))
         reconstructed = '{"original_request_received": true, "domain": "' + raw_tail
 
         # Parse JSON
@@ -196,36 +202,52 @@ class PromptRefinerService:
                 uncertainties=[],
             )
         else:
-            # Coerce into Pydantic schema
+            # Coerce cleanly into Pydantic schema (field validators normalize str -> List[str], domain aliases, etc.)
             domain_val = parsed.get("domain", domain_hint or "general")
-            if domain_val not in ("physics", "chemistry", "biology", "civil_engineering", "mechanical_engineering", "electronics", "computer_science", "general"):
-                domain_val = "general"
+            try:
+                refined_output = RefinedPromptOutput(
+                    original_request_received=True,
+                    domain=domain_val,
+                    experiment_type=parsed.get("experiment_type", "experiment"),
+                    refined_experiment_prompt=str(parsed.get("refined_experiment_prompt") or f"Interactive 3D simulation of {raw_prompt}"),
+                    filtered_search_terms=parsed.get("filtered_search_terms") or search_terms,
+                    apparatus=parsed.get("apparatus", []),
+                    parameters=parsed.get("parameters", {}),
+                    search_queries=parsed.get("search_queries") or [f"{filtered_text} technical diagram"],
+                    visual_reference_requirements=parsed.get("visual_reference_requirements", ["apparatus layout"]),
+                    constraints=parsed.get("constraints", []),
+                    uncertainties=parsed.get("uncertainties", []),
+                )
+            except Exception as val_err:
+                logger.warning("[PromptRefinerService] RefinedPromptOutput validation fallback: %s", val_err)
+                refined_output = RefinedPromptOutput(
+                    original_request_received=True,
+                    domain=domain_hint or "general",
+                    experiment_type="scientific_simulation",
+                    refined_experiment_prompt=f"Interactive 3D simulation of {raw_prompt}",
+                    filtered_search_terms=search_terms,
+                    apparatus=[filtered_text],
+                    parameters={},
+                    search_queries=[f"{filtered_text} diagram simulation"],
+                    visual_reference_requirements=["apparatus layout"],
+                    constraints=[],
+                    uncertainties=[],
+                )
 
-            refined_output = RefinedPromptOutput(
-                original_request_received=True,
-                domain=domain_val,
-                experiment_type=parsed.get("experiment_type", "experiment"),
-                refined_experiment_prompt=parsed.get("refined_experiment_prompt") or f"Interactive 3D simulation of {raw_prompt}",
-                filtered_search_terms=parsed.get("filtered_search_terms") or search_terms,
-                apparatus=parsed.get("apparatus", []),
-                parameters=parsed.get("parameters", {}),
-                search_queries=parsed.get("search_queries") or [f"{filtered_text} technical diagram"],
-                visual_reference_requirements=parsed.get("visual_reference_requirements", ["apparatus layout"]),
-                constraints=parsed.get("constraints", []),
-                uncertainties=parsed.get("uncertainties", []),
-            )
-
-        # ── Step 4: Execute Free Web Search ──
+        # ── Step 4: Execute Free Web Search (off event loop) ──
         logger.info("[PromptRefinerService] Executing free reference search for domain '%s'...", refined_output.domain)
-        candidates = free_search_service.find_references(
+        candidates = await asyncio.to_thread(
+            free_search_service.find_references,
             domain=refined_output.domain,
             search_queries=refined_output.search_queries,
             filtered_search_terms=refined_output.filtered_search_terms,
         )
 
-        # ── Step 5: Qwen 4B Evaluates & Selects Reference ──
-        logger.info("[PromptRefinerService] Qwen 4B evaluating %d visual reference candidates...", len(candidates))
-        selection_result = select_best_reference_with_qwen(refined_output, candidates, timeout=25)
+        # ── Step 5: Qwen3-4B Evaluates & Selects Reference (off event loop) ──
+        logger.info("[PromptRefinerService] Qwen3-4B evaluating %d visual reference candidates...", len(candidates))
+        selection_result = await asyncio.to_thread(
+            select_best_reference_with_qwen, refined_output, candidates, 25
+        )
 
         return refined_output, selection_result
 

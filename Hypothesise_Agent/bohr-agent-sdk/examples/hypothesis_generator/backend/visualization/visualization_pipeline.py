@@ -19,6 +19,7 @@ Coordinates the 3-Model Sequential LM Studio Architecture via `model_registry.py
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, Callable, Dict, Optional
@@ -198,14 +199,16 @@ class VisualizationPipeline:
 
             # ── Deterministic Numerical Simulation & Scientific Validation ──
             _log_progress("running_simulation", f"Executing deterministic simulation engine for domain '{refined_output.domain}'...")
-            sim_result = run_simulation({
-                "topic": refined_output.refined_experiment_prompt,
-                "design": refined_output.refined_experiment_prompt,
-                "domain": refined_output.domain,
-                "experiment_type": refined_output.experiment_type,
-                "parameters": dict(refined_output.parameters or {}),
-                "refinement": refined_output.model_dump(),
-            })
+            sim_result = await asyncio.to_thread(
+                run_simulation,
+                {
+                    "topic": raw_prompt or refined_output.refined_experiment_prompt,
+                    "design": f"{raw_prompt}\n\n{refined_output.refined_experiment_prompt}",
+                    "domain": domain_hint or refined_output.domain,
+                    "parameters": dict(refined_output.parameters or {}),
+                    "refinement": refined_output.model_dump(),
+                },
+            )
 
             numerical_results = sim_result.get("numerical_results", {})
             plot_data = sim_result.get("plot_data", [])

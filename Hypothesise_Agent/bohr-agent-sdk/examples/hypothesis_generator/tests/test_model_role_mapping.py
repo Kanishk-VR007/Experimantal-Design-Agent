@@ -409,3 +409,33 @@ def test_15_vision_buffers_released_on_failure_path_and_status_endpoint():
     assert "unload_error" in body
     role_keys = {r["role_key"] for r in body["roles"]}
     assert role_keys == {"prompt_refiner", "vision_analyzer", "main_reasoner"}
+
+
+def test_16_refined_prompt_coerces_llm_string_constraints_and_preserves_canonical_id():
+    """Regression: Qwen3-4B-Thinking returning str instead of list for constraints/uncertainties must not crash."""
+    out = RefinedPromptOutput(
+        original_request_received=True,
+        domain="physics",
+        experiment_type="ballistic_trajectory_drag_experiment",
+        refined_experiment_prompt="Projectile launched at 45 degrees with 50 m/s under aerodynamic drag",
+        constraints="Must use high-speed camera; ignore wind drift",
+        uncertainties="Measurement uncertainty in range calculation (±2%)",
+        apparatus="launcher, sphere",
+        parameters={"launch_angle_deg": 45.0, "initial_velocity_ms": 50.0},
+    )
+    assert isinstance(out.constraints, list) and len(out.constraints) == 2
+    assert isinstance(out.uncertainties, list) and "±2%" in out.uncertainties[0]
+    assert isinstance(out.apparatus, list)
+
+    # Non-canonical LLM experiment_type slug must never clobber canonical registry classification
+    from simulation_agent.agent import run_simulation
+    sim = run_simulation({
+        "topic": "Calculate 2D projectile trajectory launched at 45 degrees with 50 m/s under aerodynamic drag",
+        "design": out.refined_experiment_prompt,
+        "domain": "physics",
+        "refinement": out.model_dump(),
+    })
+    assert sim["experiment_id"] == "projectile_motion"
+    assert sim["simulation_status"] == "success"
+    assert sim["visualization"]["template"] == "projectile_motion"
+    assert sim["visualization"]["scene_valid"] is True
