@@ -86,13 +86,13 @@ function App() {
             style={{
               marginTop: '1.5rem',
               padding: '0.5rem 1.25rem',
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: '#fee2e2',
+              border: '1px solid #fca5a5',
               borderRadius: '8px',
-              color: '#fca5a5',
+              color: '#dc2626',
               cursor: 'pointer',
               fontSize: '0.85rem',
-              fontWeight: '500',
+              fontWeight: '600',
               transition: 'all 0.2s ease',
             }}
             onClick={() => {

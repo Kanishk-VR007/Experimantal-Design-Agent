@@ -296,7 +296,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--surface-container-low, #eff4ff);
 }
 
 .form-field {
@@ -341,7 +341,7 @@
   align-items: center;
   gap: 16px;
   cursor: pointer;
-  background: rgba(15, 23, 42, 0.3);
+  background: var(--surface-container-low, #eff4ff);
   transition: border-color var(--transition-fast);
 }
 
@@ -632,7 +632,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--surface-container-low, #eff4ff);
 }
 
 .stream-status-group {
@@ -791,7 +791,7 @@
 
 .section-card-body {
   padding: 20px 24px;
-  background: rgba(15, 23, 42, 0.3);
+  background: var(--surface-container-low, #eff4ff);
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -1254,7 +1254,7 @@
 }
 
 .observations-banner {
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--surface-container-low, #eff4ff);
   border-top: 1px solid rgba(51, 65, 85, 0.5);
   padding: 10px 16px;
   display: flex;

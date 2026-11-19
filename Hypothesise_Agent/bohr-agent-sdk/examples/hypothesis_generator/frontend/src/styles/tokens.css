@@ -1,34 +1,35 @@
 /* ══════════════════════════════════════════════════════════════
    DESIGN TOKENS — Hypothesise Agent
-   Dark scientific workspace theme
+   Stitch Light Scientific Workspace System
    ══════════════════════════════════════════════════════════════ */
 
 :root {
   /* ── Backgrounds ─────────────────────────────────────────── */
-  --bg-primary: #0f172a;
-  --bg-secondary: #111827;
-  --bg-card: #1e293b;
+  --bg-primary: #f8f9ff;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
 
   /* ── Borders ─────────────────────────────────────────────── */
-  --border: #334155;
-  --border-light: #475569;
+  --border: #dce9ff;
+  --border-light: #eff4ff;
 
   /* ── Accent Colors ───────────────────────────────────────── */
-  --accent-primary: #00f0ff;
-  --accent-secondary: #38bdf8;
-  --accent-ai: #a855f7;
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-error: #ef4444;
+  --accent-primary: #2563eb;
+  --accent-secondary: #006591;
+  --accent-ai: #6a1edb;
+  --accent-success: #16a34a;
+  --accent-warning: #d97706;
+  --accent-error: #dc2626;
 
   /* ── Text ────────────────────────────────────────────────── */
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #0b1c30;
+  --text-secondary: #434655;
+  --text-muted: #737686;
 
   /* ── Fonts ───────────────────────────────────────────────── */
-  --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-headline: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* ── Spacing ─────────────────────────────────────────────── */
   --space-xs: 4px;
@@ -47,12 +48,12 @@
   --radius-full: 9999px;
 
   /* ── Shadows ─────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
-  --shadow-glow-primary: 0 0 20px rgba(0, 240, 255, 0.3);
-  --shadow-glow-ai: 0 0 20px rgba(168, 85, 247, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.1);
+  --shadow-glow-primary: 0 0 15px rgba(37, 99, 235, 0.15);
+  --shadow-glow-ai: 0 0 15px rgba(106, 30, 219, 0.15);
 
   /* ── Transitions ─────────────────────────────────────────── */
   --transition-fast: 150ms ease;
@@ -67,47 +68,43 @@
   --z-modal: 500;
   --z-tooltip: 600;
 
-  /* ── Legacy compatibility ────────────────────────────────── */
-  --primary-color: #00f0ff;
-  --primary-hover: #00c8d4;
-  --primary-glow: rgba(0, 240, 255, 0.6);
-  --secondary-color: #a855f7;
-  --secondary-glow: rgba(168, 85, 247, 0.5);
-  --success-color: #10b981;
-  --warning-color: #f59e0b;
-  --error-color: #ef4444;
-  --bg-color: #0f172a;
-  --surface-color: #1e293b;
-  --surface-hover: #334155;
-  --surface-elevated: #1e293b;
-  --text-tertiary: #64748b;
-  --border-color: #334155;
-  --border-glow: rgba(0, 240, 255, 0.3);
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  --glow-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+  /* ── Compatibility Aliases ─────────────────────────────────── */
+  --primary-color: #2563eb;
+  --primary-hover: #004ac6;
+  --primary-glow: rgba(37, 99, 235, 0.2);
+  --secondary-color: #006591;
+  --secondary-glow: rgba(0, 101, 145, 0.15);
+  --success-color: #16a34a;
+  --warning-color: #d97706;
+  --error-color: #dc2626;
+  --bg-color: #f8f9ff;
+  --surface-color: #ffffff;
+  --surface-hover: #eff4ff;
+  --surface-elevated: #ffffff;
+  --text-tertiary: #737686;
+  --border-color: #dce9ff;
+  --border-glow: rgba(37, 99, 235, 0.25);
+  --shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+  --glow-shadow: 0 0 15px rgba(37, 99, 235, 0.15);
 }
-
-/* ══════════════════════════════════════════════════════════════
-   GLASSMORPHISM UTILITIES
-   ══════════════════════════════════════════════════════════════ */
 
 .glass {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.5);
-}
-
-.glass-strong {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(51, 65, 85, 0.6);
+  border: 1px solid #dce9ff;
 }
 
 .glass-subtle {
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(51, 65, 85, 0.3);
+  border: 1px solid #eff4ff;
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #dce9ff;
 }
