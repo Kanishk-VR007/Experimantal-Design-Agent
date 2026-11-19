@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useExperimentStore } from '../../stores/experimentStore'
+import DataFreshnessIndicator from '../DataFreshnessIndicator'
 
 const VIEW_TITLES = {
   overview: 'New Experiment',
@@ -17,8 +20,34 @@ function TopBar({ status, onRefreshHealth }) {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const toggleInspector = useWorkspaceStore((s) => s.toggleInspector)
   const toggleDiagnosticDrawer = useWorkspaceStore((s) => s.toggleDiagnosticDrawer)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const viewTitle = VIEW_TITLES[activeView] || activeView
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && searchTerm.trim()) {
+      const q = searchTerm.toLowerCase()
+      if (q.includes('sim') || q.includes('3d') || q.includes('ode')) {
+        setActiveView('simulation')
+      } else if (q.includes('agent') || q.includes('model') || q.includes('vram')) {
+        setActiveView('agent-activity')
+      } else if (q.includes('eval') || q.includes('score') || q.includes('audit')) {
+        setActiveView('evaluation')
+      } else if (q.includes('memo') || q.includes('vector') || q.includes('weight')) {
+        setActiveView('memory')
+      } else if (q.includes('paper') || q.includes('arxiv') || q.includes('ref')) {
+        setActiveView('papers')
+      } else if (q.includes('hist') || q.includes('run')) {
+        setActiveView('history')
+      } else {
+        setActiveView('overview')
+      }
+    }
+  }
+
+  const latencyStr = status?.backendHealthy
+    ? `Online ${status.latencyMs ?? 14}ms`
+    : 'Connecting'
 
   return (
     <header className="topbar h-16 bg-surface/90 backdrop-blur-xl z-40 flex items-center justify-between px-6 border-b border-surface-container-high shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
@@ -35,7 +64,7 @@ function TopBar({ status, onRefreshHealth }) {
 
         <div className="h-4 w-[1px] bg-outline-variant"></div>
         <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-medium">
-          Quantum Dynamics Lab
+          Autonomous Lab
         </span>
 
         <div className="h-4 w-[1px] bg-outline-variant hidden xl:block"></div>
@@ -51,8 +80,11 @@ function TopBar({ status, onRefreshHealth }) {
         </nav>
       </div>
 
-      {/* Right: Telemetry, Search, Actions & Profile */}
+      {/* Right: Telemetry, Run Badge, Search, Actions */}
       <div className="flex items-center gap-3">
+        {/* Compact Freshness Badge */}
+        <DataFreshnessIndicator compact />
+
         {/* Live Cluster Pills */}
         <div className="hidden 2xl:flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-[11px]">
@@ -61,34 +93,43 @@ function TopBar({ status, onRefreshHealth }) {
                 status?.healthy ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
               }`}
             ></div>
-            <span className="font-medium">
-              Backend {status?.healthy ? 'Online 14ms' : 'Connecting'}
-            </span>
+            <span className="font-medium font-mono">Backend {latencyStr}</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-[11px]">
             <span className="material-symbols-outlined text-[14px] text-secondary">cognition</span>
-            <span className="font-medium">LM Studio 3-Model</span>
+            <span className="font-medium truncate max-w-[150px]">
+              {status?.activeModel ? status.activeModel.split('/')[1] || status.activeModel : 'LM Studio 3-Model'}
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-[11px]">
-            <span className="material-symbols-outlined text-[14px] text-primary">sync_alt</span>
-            <span className="font-medium">Memory Sync 99.8%</span>
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                status?.memoryHealthy ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+            ></span>
+            <span className="font-medium">
+              {status?.memoryHealthy ? 'Memory Synced' : 'Memory Standby'}
+            </span>
           </div>
         </div>
 
-        {/* Global Search Box */}
+        {/* Functional Search Box */}
         <div className="relative flex items-center">
           <span className="material-symbols-outlined absolute left-2.5 text-outline text-[17px]">
             search
           </span>
           <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             className="w-44 lg:w-56 pl-8 pr-9 py-1.5 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline text-[12px] focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all border border-transparent focus:border-primary/40"
-            placeholder="Search hypotheses, agents..."
+            placeholder="Jump to view... (Enter)"
             type="text"
           />
           <span className="absolute right-2 text-[10px] text-outline border border-outline-variant px-1 rounded bg-surface-container-lowest font-mono">
-            ⌘K
+            ↵
           </span>
         </div>
 
@@ -117,28 +158,6 @@ function TopBar({ status, onRefreshHealth }) {
           >
             <span className="material-symbols-outlined text-[19px]">tune</span>
           </button>
-        </div>
-
-        {/* New Experiment CTA */}
-        <button
-          onClick={() => setActiveView('overview')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-container text-white rounded-lg text-[12px] font-semibold hover:bg-primary transition-all shadow-sm"
-        >
-          <span className="material-symbols-outlined text-[16px]">add</span>
-          <span>New Experiment</span>
-        </button>
-
-        {/* User Badge */}
-        <div className="flex items-center gap-2 pl-2 border-l border-surface-container-high">
-          <div className="hidden md:flex flex-col text-right">
-            <span className="text-[12px] text-on-surface font-semibold leading-tight">
-              Dr. Investigator
-            </span>
-            <span className="text-[10px] text-on-surface-variant font-medium">Lead AI Scientist</span>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white shadow-sm">
-            <span className="material-symbols-outlined text-[18px]">person</span>
-          </div>
         </div>
       </div>
     </header>

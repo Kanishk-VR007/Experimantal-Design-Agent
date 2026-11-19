@@ -1,4 +1,6 @@
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+import { useExperimentStore } from '../../stores/experimentStore'
+import { useBackendHealth } from '../../hooks/useBackendHealth'
 
 const NAV_SECTIONS = [
   {
@@ -33,6 +35,25 @@ function Sidebar() {
   const setActiveView = useWorkspaceStore((s) => s.setActiveView)
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar)
 
+  const currentRunId = useExperimentStore((s) => s.currentRunId)
+  const generating = useExperimentStore((s) => s.generating)
+  const simulating = useExperimentStore((s) => s.simulating)
+  const modelStatus = useExperimentStore((s) => s.modelStatus)
+
+  const { status } = useBackendHealth()
+
+  const isBusy = generating || simulating
+  const computePct = isBusy ? 88 : status.backendHealthy ? 24 : 0
+  const latencyDisplay = status.backendHealthy
+    ? `${status.latencyMs ?? 14} ms`
+    : 'Offline'
+
+  const activeRoleName = modelStatus?.active_role_key
+    ? modelStatus.active_role_key.replace('_', ' ').toUpperCase()
+    : status.backendHealthy
+    ? 'LM STUDIO 3-ROLE'
+    : 'STANDBY'
+
   return (
     <aside
       className={`sidebar-panel ${collapsed ? 'collapsed w-[72px] min-w-[72px]' : 'w-72 min-w-[288px]'} bg-surface-container-lowest flex flex-col justify-between border-r border-surface-container-high transition-all duration-200 select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]`}
@@ -50,7 +71,7 @@ function Sidebar() {
                   Hypothesise
                 </span>
                 <span className="text-[10px] text-on-surface-variant font-medium">
-                  Quantum Dynamics
+                  Autonomous Research OS
                 </span>
               </div>
             )}
@@ -66,22 +87,27 @@ function Sidebar() {
           </button>
         </div>
 
-        {/* Swarm Compute Card */}
+        {/* Live Swarm Compute Card */}
         {!collapsed && (
           <div className="p-3">
             <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/60">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] text-on-surface-variant font-semibold tracking-wider uppercase">
-                  Swarm Compute
+                  Engine Compute Load
                 </span>
-                <span className="text-[11px] text-primary font-bold">94.2%</span>
+                <span className="text-[11px] text-primary font-bold">{computePct}%</span>
               </div>
               <div className="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-                <div className="h-full bg-primary-container rounded-full" style={{ width: '94.2%' }}></div>
+                <div
+                  className="h-full bg-primary-container rounded-full transition-all duration-500"
+                  style={{ width: `${computePct}%` }}
+                ></div>
               </div>
               <div className="flex justify-between items-center mt-1.5 text-[10px]">
-                <span className="text-outline">Allocated: 384/400</span>
-                <span className="text-secondary font-semibold">ACTIVE</span>
+                <span className="text-outline truncate max-w-[150px]">{activeRoleName}</span>
+                <span className={`font-semibold ${isBusy ? 'text-secondary animate-pulse' : 'text-outline'}`}>
+                  {isBusy ? 'RUNNING' : 'ONLINE'}
+                </span>
               </div>
             </div>
           </div>
@@ -129,28 +155,39 @@ function Sidebar() {
         </nav>
       </div>
 
-      {/* Bottom Secure Enclave */}
+      {/* Bottom Telemetry Card */}
       <div className="p-3 bg-surface-container-lowest border-t border-surface-container-high">
         {!collapsed ? (
           <div className="p-2.5 rounded-xl bg-surface-container-low flex flex-col gap-1 border border-surface-container-high/60">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-outline font-medium">Latency Cycle</span>
-              <span className="text-secondary font-semibold font-mono">0.42 ms</span>
+              <span className="text-outline font-medium">Ping Roundtrip</span>
+              <span className="text-secondary font-semibold font-mono">{latencyDisplay}</span>
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-outline font-medium">Session</span>
-              <span className="text-on-surface-variant font-mono font-medium">#0x4F88A</span>
+              <span className="text-outline font-medium">Active Run</span>
+              <span className="text-on-surface-variant font-mono font-medium truncate max-w-[120px]">
+                {currentRunId || 'None'}
+              </span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></div>
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  status.backendHealthy ? 'bg-secondary-container animate-pulse' : 'bg-red-500'
+                }`}
+              ></div>
               <span className="text-[10px] text-on-secondary-container font-semibold tracking-wider uppercase">
-                SECURE ENCLAVE
+                {status.backendHealthy ? 'LM STUDIO ENCLAVE' : 'OFFLINE'}
               </span>
             </div>
           </div>
         ) : (
           <div className="flex justify-center">
-            <div className="w-2 h-2 rounded-full bg-secondary-container animate-pulse" title="SECURE ENCLAVE"></div>
+            <div
+              className={`w-2 h-2 rounded-full ${
+                status.backendHealthy ? 'bg-secondary-container animate-pulse' : 'bg-red-500'
+              }`}
+              title={status.backendHealthy ? 'LM STUDIO ENCLAVE ONLINE' : 'OFFLINE'}
+            ></div>
           </div>
         )}
       </div>

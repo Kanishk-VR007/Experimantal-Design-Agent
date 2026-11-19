@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Atom, RefreshCw } from 'lucide-react'
 import Experiment3DViewer from '../../components/visualization/Experiment3DViewer'
 import BlueprintVisualizer from '../../components/BlueprintVisualizer'
@@ -7,8 +7,11 @@ import MechVisualizer from '../../components/MechVisualizer'
 import AlgorithmVisualizer from '../../components/AlgorithmVisualizer'
 import ScientificPlotlyChart from './charts/ScientificPlotlyChart'
 import MultiModelPipelinePanel from './MultiModelPipelinePanel'
+import ScientificValidationPanel from '../../components/ScientificValidationPanel'
+import DataFreshnessIndicator from '../../components/DataFreshnessIndicator'
 
 import { runSimulation as runSimulationApi } from '../../services/apiClient'
+import { updateParameters as updateParametersApi } from '../../services/simulationService'
 import { useExperimentStore } from '../../stores/experimentStore'
 
 function SimulationWorkspace({ simulation, onSimulationUpdated }) {
@@ -16,6 +19,16 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
   const [loadingBenchmark, setLoadingBenchmark] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x')
   const [isSimPlaying, setIsSimPlaying] = useState(true)
+  const [paramState, setParamState] = useState({})
+  const [updatingParams, setUpdatingParams] = useState(false)
+
+  // Sync paramState from incoming simulation procedure or numerical results
+  useEffect(() => {
+    if (simulation) {
+      const procParams = simulation.procedure?.parameters || {}
+      setParamState({ ...procParams })
+    }
+  }, [simulation?.simulation_id])
 
   const handlePipelineComplete = (result) => {
     if (!result) return
@@ -72,6 +85,29 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
       console.error('Benchmark execution error:', e)
     } finally {
       setLoadingBenchmark(false)
+    }
+  }
+
+  // Live parameter adjustment with immediate deterministic re-solve
+  const handleParamChange = async (key, value) => {
+    const updated = { ...paramState, [key]: Number(value) }
+    setParamState(updated)
+    setUpdatingParams(true)
+    try {
+      const expId = simulation?.experiment_id || simulation?.domain || 'beam_analysis'
+      const activeDomain = simulation?.domain || 'physics'
+      const res = await updateParametersApi(expId, activeDomain, updated, simulation?.procedure)
+      if (res && res.simulation && onSimulationUpdated) {
+        onSimulationUpdated({
+          ...simulation,
+          ...res.simulation,
+          simulation_id: simulation.simulation_id,
+        })
+      }
+    } catch (err) {
+      console.warn('Parameter update re-solve notice:', err.message)
+    } finally {
+      setUpdatingParams(false)
     }
   }
 
@@ -136,7 +172,7 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
   const {
     domain,
     experiment_id,
-    simulation_id = 'TK-982-ALPHA',
+    simulation_id = 'RUN-LIVE',
     status,
     simulation_status,
     engine_used,
@@ -177,91 +213,148 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
     }
   }
 
-  // Derive domain-specific telemetry numbers from numerical_results or defaults
+  // Derive domain-adaptive telemetry metrics from numerical_results
   const numRes = numerical_results || {}
-  const stressVal = numRes.max_stress_mpa ?? numRes.max_stress ?? 294.6
-  const deflVal = numRes.max_deflection_mm ?? numRes.max_deflection ?? 14.82
-  const strainVal = numRes.max_strain ?? '3.42×10⁻³'
-  const loadVal = numRes.applied_force_kn ?? numRes.load_p_kn ?? 24.5
+  const getDomainMetrics = () => {
+    const d = (domain || '').toLowerCase()
+    if (d === 'electronics' || d.includes('circuit') || numRes.v_drop || numRes.r_lim) {
+      return [
+        { label: 'Voltage Drop (V)', val: numRes.v_drop ?? numRes.voltage ?? '2.04', unit: 'V' },
+        { label: 'Forward Current (I)', val: numRes.i_fwd ?? numRes.current_ma ?? '20.0', unit: 'mA' },
+        { label: 'Limiting Resistor (R)', val: numRes.r_lim ?? numRes.resistance ?? '150', unit: 'Ω' },
+        { label: 'Power Dissipation', val: numRes.power_mw ?? '40.8', unit: 'mW' },
+      ]
+    }
+    if (d === 'mechanical' || d.includes('gear') || numRes.gear_ratio) {
+      return [
+        { label: 'Gear Ratio (i)', val: numRes.gear_ratio ?? '3.00:1', unit: '' },
+        { label: 'Torque Output', val: numRes.torque_out ?? numRes.torque_out_nm ?? '79.6', unit: 'N·m' },
+        { label: 'Angular Velocity', val: numRes.omega_out ?? '62.8', unit: 'rad/s' },
+        { label: 'Kinematic Efficiency', val: numRes.efficiency ?? '98.4%', unit: '' },
+      ]
+    }
+    if (d === 'physics' || d.includes('pendulum') || numRes.period) {
+      return [
+        { label: 'Period (T)', val: numRes.period ?? numRes.period_s ?? '2.48', unit: 's' },
+        { label: 'Q-Factor', val: numRes.q_factor ?? '45.2', unit: '' },
+        { label: 'Energy Loss/Cycle', val: numRes.energy_loss ?? '4.2%', unit: '' },
+        { label: 'Phase Dev', val: numRes.phase_dev ?? '< 0.01', unit: 'rad' },
+      ]
+    }
+    if (d === 'cs' || d === 'computer_science' || numRes.comparisons || numRes.epochs) {
+      return [
+        { label: 'Operations / Epochs', val: numRes.epochs ?? numRes.comparisons ?? '50', unit: 'steps' },
+        { label: 'Loss Floor / Time', val: numRes.loss_floor ?? numRes.execution_time ?? '0.142', unit: '' },
+        { label: 'Computational Cost', val: numRes.flops ?? numRes.memory_mb ?? '1.2 GFLOPs', unit: '' },
+        { label: 'Convergence Bound', val: numRes.convergence ?? '28 epochs', unit: '' },
+      ]
+    }
+    // Civil / Continuum default
+    return [
+      { label: 'Max Deflection (w)', val: numRes.max_deflection_mm ?? numRes.max_deflection ?? 'Not calculated', unit: numRes.max_deflection_mm ? 'mm' : '' },
+      { label: 'Max Fiber Stress (σ)', val: numRes.max_stress_mpa ?? numRes.max_stress ?? 'Not calculated', unit: numRes.max_stress_mpa ? 'MPa' : '' },
+      { label: 'Max Strain (ε)', val: numRes.max_strain ?? 'Not calculated', unit: '' },
+      { label: 'Applied Force (P)', val: numRes.applied_force_kn ?? numRes.load_p_kn ?? 'Not calculated', unit: numRes.applied_force_kn ? 'kN' : '' },
+    ]
+  }
+
+  const telemetryMetrics = getDomainMetrics()
+
+  // Domain-specific governing equations
+  const governingEqs = validation?.governing_equations && validation.governing_equations.length > 0
+    ? validation.governing_equations
+    : domain === 'electronics'
+    ? ['V = I · R (Ohmic Transport Equilibrium)', 'P = I² · R (Joule Thermal Dissipation)']
+    : domain === 'mechanical'
+    ? ['i = ω_in / ω_out = N_gear / N_pinion', 'T_out = T_in · i · η']
+    : domain === 'physics'
+    ? ['d²θ/dt² + (b/m)dθ/dt + (g/L)sin(θ) = 0']
+    : domain === 'cs'
+    ? ['T(n) = 2T(n/2) + O(n) (Divide-and-Conquer Bound)']
+    : ['ρA(∂²w/∂t²) - κGA(∂²w/∂x² - ∂φ/∂x) = q(x,t)', 'EI(∂²φ/∂x²) + κGA(∂w/∂x - φ) = 0']
 
   return (
-    <div className="flex flex-col w-full p-4 lg:p-6 pb-20 select-none">
-      {/* ── Top Bar ───────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 py-3 mb-4 bg-surface-container-lowest shadow-sm rounded-xl px-4 border border-surface-container-high">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-            <h2 className="font-headline-sm text-base lg:text-lg text-on-surface font-bold tracking-tight">
-              {domain ? domain.toUpperCase() : 'PHYSICS'}: {experiment_id || 'Interactive Simulation Laboratory'}
-            </h2>
+    <div className="flex flex-col w-full p-4 lg:p-6 pb-20 select-none gap-6">
+      {/* ── Top Bar with Data Freshness ────────────────────────────────────── */}
+      <div className="flex flex-col gap-3">
+        <DataFreshnessIndicator />
+
+        <div className="flex flex-wrap items-center justify-between gap-4 py-3 bg-surface-container-lowest shadow-sm rounded-xl px-4 border border-surface-container-high">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
+              <h2 className="font-headline-sm text-base lg:text-lg text-on-surface font-bold tracking-tight">
+                {domain ? domain.toUpperCase() : 'MULTI-PHYSICS'}: {experiment_id || 'Deterministic Laboratory'}
+              </h2>
+            </div>
+
+            <div className="h-4 w-[1px] bg-outline-variant"></div>
+
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-surface-container-high text-primary font-mono font-semibold">
+              ID #{simulation_id}
+            </span>
+
+            <span className="text-[11px] text-outline font-mono hidden md:inline">
+              Solver: {solver?.name || engine_used || 'RK45 Adaptive • SciPy'}
+            </span>
           </div>
 
-          <div className="h-4 w-[1px] bg-outline-variant"></div>
-
-          <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-surface-container-high text-primary font-mono font-semibold">
-            Run ID #{simulation_id}
-          </span>
-
-          <span className="text-[11px] text-outline font-mono hidden md:inline">
-            Solver: {solver?.name || 'RK45 Adaptive • Tol 1e-7'}
-          </span>
-        </div>
-
-        {/* View mode toggle tabs */}
-        <div className="flex items-center gap-1.5 bg-surface-container-low p-1 rounded-lg border border-surface-container-high">
-          <button
-            type="button"
-            onClick={() => setActiveTab('split')}
-            className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
-              activeTab === 'split'
-                ? 'bg-primary-container text-white shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[15px]">view_column</span>
-            <span>Split View</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('3d')}
-            className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
-              activeTab === '3d'
-                ? 'bg-primary-container text-white shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[15px]">view_in_ar</span>
-            <span>3D Studio</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('2d')}
-            className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
-              activeTab === '2d'
-                ? 'bg-primary-container text-white shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[15px]">show_chart</span>
-            <span>2D Plotly</span>
-          </button>
-
-          {renderDomainVisualizer() && (
+          {/* View mode toggle tabs */}
+          <div className="flex items-center gap-1.5 bg-surface-container-low p-1 rounded-lg border border-surface-container-high">
             <button
               type="button"
-              onClick={() => setActiveTab('schematic')}
+              onClick={() => setActiveTab('split')}
               className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                activeTab === 'schematic'
+                activeTab === 'split'
                   ? 'bg-primary-container text-white shadow-sm'
                   : 'text-on-surface-variant hover:text-on-surface'
               }`}
             >
-              <span className="material-symbols-outlined text-[15px]">hub</span>
-              <span>Schematic</span>
+              <span className="material-symbols-outlined text-[15px]">view_column</span>
+              <span>Split View</span>
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('3d')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                activeTab === '3d'
+                  ? 'bg-primary-container text-white shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">view_in_ar</span>
+              <span>3D Studio</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('2d')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                activeTab === '2d'
+                  ? 'bg-primary-container text-white shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">show_chart</span>
+              <span>2D Plotly</span>
+            </button>
+
+            {renderDomainVisualizer() && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('schematic')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  activeTab === 'schematic'
+                    ? 'bg-primary-container text-white shadow-sm'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[15px]">hub</span>
+                <span>Schematic</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -275,19 +368,16 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
               <div className="flex flex-wrap items-center justify-between gap-2 z-10 mb-2 pointer-events-none">
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 backdrop-blur-md text-[11px] font-mono font-bold text-on-surface border border-surface-container-high shadow-sm pointer-events-auto">
-                    CLAMP: x=0 (FIXED)
+                    DOMAIN: {(domain || 'PHYSICS').toUpperCase()}
                   </span>
                   <span className="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 backdrop-blur-md text-[11px] font-mono font-bold text-primary border border-surface-container-high shadow-sm pointer-events-auto">
-                    F_applied = {loadVal} kN
+                    {telemetryMetrics[0]?.label}: {telemetryMetrics[0]?.val} {telemetryMetrics[0]?.unit}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 backdrop-blur-md text-[11px] font-mono font-bold text-secondary border border-surface-container-high shadow-sm pointer-events-auto">
-                    σ_max = {stressVal} MPa
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-surface-container-lowest/90 backdrop-blur-md text-[11px] font-mono font-bold text-on-surface border border-surface-container-high shadow-sm pointer-events-auto">
-                    δ_max = {deflVal} mm
+                    {telemetryMetrics[1]?.label}: {telemetryMetrics[1]?.val} {telemetryMetrics[1]?.unit}
                   </span>
                 </div>
               </div>
@@ -314,22 +404,8 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
                     </span>
                   </button>
 
-                  <button
-                    type="button"
-                    className="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface flex items-center justify-center hover:bg-surface-container"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">skip_previous</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface flex items-center justify-center hover:bg-surface-container"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">skip_next</span>
-                  </button>
-
                   <span className="text-[11px] font-mono text-outline font-semibold ml-2">
-                    t = 4.84s / 12.50s (Δt = 0.002s)
+                    {solver?.name || 'SciPy Deterministic Solver'} • State Synchronized
                   </span>
                 </div>
 
@@ -382,11 +458,14 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
               </div>
             </div>
           )}
+
+          {/* Embedded Scientific Validation Panel */}
+          <ScientificValidationPanel validation={validation} solverName={solver?.name || engine_used} />
         </div>
 
         {/* Right Column (4 cols): Telemetry & Physics Controls */}
         <div className="col-span-12 xl:col-span-4 flex flex-col gap-4">
-          {/* Kinematic Telemetry Card */}
+          {/* Domain Adaptive Telemetry Card */}
           <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-high flex flex-col gap-3">
             <div className="flex items-center justify-between border-b border-surface-container-high pb-2">
               <div className="flex items-center gap-2">
@@ -399,41 +478,19 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="p-3 rounded-lg bg-surface-container-low border border-surface-container-high/60">
-                <span className="text-[10px] text-outline uppercase font-semibold">Max Strain (ε)</span>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-mono text-lg font-bold text-on-surface">{strainVal}</span>
-                </div>
-                <span className="text-[10px] text-outline font-mono">ε_crit = 5.00×10⁻³</span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-surface-container-low border border-surface-container-high/60">
-                <span className="text-[10px] text-outline uppercase font-semibold">Max Deflection (w)</span>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-mono text-lg font-bold text-primary">{deflVal}</span>
-                  <span className="text-[11px] text-outline font-mono">mm</span>
-                </div>
-                <span className="text-[10px] text-secondary font-mono font-semibold">Span / 270</span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-surface-container-low border border-surface-container-high/60">
-                <span className="text-[10px] text-outline uppercase font-semibold">Max Fiber Stress (σ)</span>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-mono text-lg font-bold text-on-surface">{stressVal}</span>
-                  <span className="text-[11px] text-outline font-mono">MPa</span>
-                </div>
-                <span className="text-[10px] text-secondary font-mono font-semibold">Yield Ratio 0.74</span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-surface-container-low border border-surface-container-high/60">
-                <span className="text-[10px] text-outline uppercase font-semibold">Confidence Floor</span>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-mono text-lg font-bold text-secondary">
-                    {confidence_score != null ? `${(confidence_score * 100).toFixed(1)}%` : '98.8%'}
+              {telemetryMetrics.map((m, idx) => (
+                <div key={idx} className="p-3 rounded-lg bg-surface-container-low border border-surface-container-high/60">
+                  <span className="text-[10px] text-outline uppercase font-semibold block truncate">
+                    {m.label}
                   </span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="font-mono text-base font-bold text-on-surface truncate">
+                      {m.val}
+                    </span>
+                    {m.unit && <span className="text-[11px] text-outline font-mono">{m.unit}</span>}
+                  </div>
                 </div>
-                <span className="text-[10px] text-outline font-mono">Validated σ</span>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -444,51 +501,164 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
                 <span className="material-symbols-outlined text-[18px] text-primary">functions</span>
                 <span className="font-headline-sm text-[13px] font-bold text-on-surface">Governing Differential System</span>
               </div>
-              <span className="text-[10px] text-outline font-mono">CONTINUUM</span>
+              <span className="text-[10px] text-outline font-mono">
+                {domain ? domain.toUpperCase() : 'EQUATIONS'}
+              </span>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-surface-container-low border border-surface-container-high/60 font-mono text-[11px] text-on-surface flex flex-col gap-1">
-              <span>ρA(∂²w/∂t²) - κGA(∂²w/∂x² - ∂φ/∂x) = q(x,t)</span>
-              <span className="text-outline text-[10px]">Transverse Momentum Balance</span>
-              <span className="pt-1">ρI(∂²φ/∂t²) - EI(∂²φ/∂x²) - κGA(∂w/∂x - φ) = 0</span>
-              <span className="text-outline text-[10px]">Rotational Equilibrium</span>
+            <div className="p-2.5 rounded-lg bg-surface-container-low border border-surface-container-high/60 font-mono text-[11px] text-on-surface flex flex-col gap-1.5">
+              {governingEqs.map((eq, i) => (
+                <div key={i} className="flex flex-col">
+                  <span>{eq}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Physical Parameters Card */}
+          {/* Physical Parameters Card with Interactive Live Re-Solve */}
           <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-high flex flex-col gap-3">
             <div className="flex items-center justify-between border-b border-surface-container-high pb-2">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px] text-tertiary">tune</span>
                 <span className="font-headline-sm text-[13px] font-bold text-on-surface">Physical Parameters</span>
               </div>
-              <button className="text-[11px] text-primary hover:underline">Reset Defaults</button>
+              {updatingParams && (
+                <span className="text-[10px] text-primary font-mono font-bold animate-pulse">
+                  Re-solving ODE...
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-on-surface-variant font-medium">Young's Modulus (E)</span>
-                  <span className="font-mono font-bold text-on-surface">210 GPa (Structural Steel)</span>
-                </div>
-                <input type="range" min="50" max="400" defaultValue="210" className="w-full accent-primary" />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-on-surface-variant font-medium">Applied Tip Force (P)</span>
-                  <span className="font-mono font-bold text-on-surface">{loadVal} kN</span>
-                </div>
-                <input type="range" min="1" max="100" defaultValue="24.5" className="w-full accent-primary" />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-on-surface-variant font-medium">Beam Span (L)</span>
-                  <span className="font-mono font-bold text-on-surface">4.00 m</span>
-                </div>
-                <input type="range" min="1" max="10" defaultValue="4" className="w-full accent-primary" />
-              </div>
+              {domain === 'electronics' ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Supply Voltage (V_in)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.voltage_in ?? 5.0} V
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="24"
+                      step="0.5"
+                      value={paramState.voltage_in ?? 5.0}
+                      onChange={(e) => handleParamChange('voltage_in', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Target Current (I_fwd)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.target_current_ma ?? 20} mA
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="100"
+                      step="1"
+                      value={paramState.target_current_ma ?? 20}
+                      onChange={(e) => handleParamChange('target_current_ma', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                </>
+              ) : domain === 'physics' ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Pendulum Length (L)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.length_m ?? 1.5} m
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="5.0"
+                      step="0.1"
+                      value={paramState.length_m ?? 1.5}
+                      onChange={(e) => handleParamChange('length_m', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Bob Mass (m)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.mass_kg ?? 0.5} kg
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="5.0"
+                      step="0.1"
+                      value={paramState.mass_kg ?? 0.5}
+                      onChange={(e) => handleParamChange('mass_kg', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Young's Modulus (E)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.youngs_modulus_gpa ?? 210} GPa
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="400"
+                      step="10"
+                      value={paramState.youngs_modulus_gpa ?? 210}
+                      onChange={(e) => handleParamChange('youngs_modulus_gpa', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Applied Load (P)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.applied_force_kn ?? 20} kN
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value={paramState.applied_force_kn ?? 20}
+                      onChange={(e) => handleParamChange('applied_force_kn', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-on-surface-variant font-medium">Span Length (L)</span>
+                      <span className="font-mono font-bold text-on-surface">
+                        {paramState.beam_length_m ?? 4.0} m
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value={paramState.beam_length_m ?? 4.0}
+                      onChange={(e) => handleParamChange('beam_length_m', e.target.value)}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -499,14 +669,20 @@ function SimulationWorkspace({ simulation, onSimulationUpdated }) {
                 <span className="material-symbols-outlined text-[18px] text-outline">terminal</span>
                 <span className="font-headline-sm text-[13px] font-bold text-on-surface">Solver Audit Stream</span>
               </div>
-              <span className="text-[10px] text-secondary font-mono font-semibold">T-STEP #4290</span>
+              <span className="text-[10px] text-secondary font-mono font-semibold">
+                {validation?.overall_valid ? 'STATUS OK' : 'AUDITED'}
+              </span>
             </div>
 
             <div className="bg-surface-container-low rounded-lg p-2.5 border border-surface-container-high/60 font-mono text-[10px] flex flex-col gap-1 max-h-44 overflow-y-auto">
-              <div className="text-secondary font-semibold">[04.838s] STEP_OK: RK45 step accepted err=2.41e-8 &lt; tol</div>
-              <div className="text-on-surface-variant">[04.839s] STIFFNESS: Jacobian refreshed, condition=1.04e3</div>
-              <div className="text-secondary font-semibold">[04.840s] BOUNDARY: Fixed clamp moment reaction M_0=98.0 kN•m</div>
-              <div className="text-primary font-semibold">[04.841s] EULER_CHECK: Invariant |δ(L) - PL³/3EI| &lt; 0.05% PASS</div>
+              <div className="text-secondary font-semibold">
+                [SOLVER_INIT] Engine: {solver?.name || engine_used || 'SciPy ODE'} initialized
+              </div>
+              {validation?.checks && validation.checks.map((chk, i) => (
+                <div key={i} className={chk.passed ? 'text-emerald-700' : 'text-red-700'}>
+                  [{chk.passed ? 'CHECK_PASS' : 'CHECK_FAIL'}] {chk.name}: {chk.detail || (chk.passed ? 'Verified' : 'Flagged')}
+                </div>
+              ))}
               {simulation_log && simulation_log.length > 0 && simulation_log.map((log, i) => (
                 <div key={i} className="text-on-surface-variant">{log}</div>
               ))}

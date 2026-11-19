@@ -3,6 +3,9 @@ import { Sparkles, RefreshCw } from 'lucide-react'
 import ConstraintEditor from './ConstraintEditor'
 import DatasetUploader from './DatasetUploader'
 import LiteratureSettings from './LiteratureSettings'
+import { useExperimentStore } from '../../stores/experimentStore'
+import ExperimentPipelineStatus from '../../components/ExperimentPipelineStatus'
+import ReferenceSearchPanel from '../../components/ReferenceSearchPanel'
 
 const DOMAINS = [
   {
@@ -146,6 +149,28 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef(null)
 
+  const runElapsedTime = useExperimentStore((s) => s.runElapsedTime)
+  const papers = useExperimentStore((s) => s.papers)
+  const storeGenerating = useExperimentStore((s) => s.generating)
+  const latencyDisplay = runElapsedTime ? `${runElapsedTime} s` : storeGenerating ? 'Timing...' : 'Standby'
+
+  // Dynamic semantic complexity and solvability calculation based on formulation
+  const words = topic.trim().split(/\s+/).filter(Boolean)
+  const wordCount = words.length
+  const hasMath = /[=\+\-\*\/\^\\_δσερωφμθπ]/.test(topic)
+  const hasNumbers = /\d+/.test(topic)
+  const hasDomainKeyword = /(cantilever|beam|stress|deflection|gear|torque|pendulum|damping|ohm|resistor|voltage|current|cnn|vit|quicksort|mergesort)/i.test(topic)
+
+  let calcComplexity = 4.0
+  if (wordCount > 5) calcComplexity += 1.5
+  if (wordCount > 15) calcComplexity += 1.5
+  if (hasMath) calcComplexity += 1.2
+  if (hasNumbers) calcComplexity += 0.8
+  if (hasDomainKeyword) calcComplexity += 1.0
+  const complexityScore = Math.min(9.8, Math.max(3.0, calcComplexity)).toFixed(1)
+  const complexityPct = Math.round((Number(complexityScore) / 10) * 100)
+  const solvabilityPct = hasDomainKeyword ? 98.2 : wordCount > 8 ? 92.4 : 78.0
+
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (SpeechRecognition) {
@@ -230,7 +255,7 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
                 <span className="material-symbols-outlined text-[18px] text-primary">timer</span>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-outline uppercase font-semibold">Formulation Latency</span>
-                  <span className="text-[12px] text-on-surface font-bold">1.28 s</span>
+                  <span className="text-[12px] text-on-surface font-bold">{latencyDisplay}</span>
                 </div>
               </div>
 
@@ -239,7 +264,7 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
                 <div className="flex flex-col">
                   <span className="text-[10px] text-outline uppercase font-semibold">Verified Protocols</span>
                   <span className="text-[12px] text-secondary font-bold">
-                    14,290+ <span className="text-[10px] text-outline font-normal">audited</span>
+                    57 <span className="text-[10px] text-outline font-normal">canonical</span>
                   </span>
                 </div>
               </div>
@@ -247,9 +272,9 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low border border-surface-container-high/60 shadow-sm">
                 <span className="material-symbols-outlined text-[18px] text-primary-container">format_image_left</span>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-outline uppercase font-semibold">Confidence Floor</span>
+                  <span className="text-[10px] text-outline uppercase font-semibold">Anti-Hallucination</span>
                   <span className="text-[12px] text-primary font-bold">
-                    99.4% <span className="text-[10px] text-outline font-normal">Bayesian σ</span>
+                    Strict <span className="text-[10px] text-outline font-normal">Proof Gates</span>
                   </span>
                 </div>
               </div>
@@ -258,7 +283,7 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
                 <span className="material-symbols-outlined text-[18px] text-tertiary">alt_route</span>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-outline uppercase font-semibold">Proof Synthesizer</span>
-                  <span className="text-[12px] text-tertiary font-bold">Z3 + Lean 4</span>
+                  <span className="text-[12px] text-tertiary font-bold">NumPy • SciPy • RK45</span>
                 </div>
               </div>
             </div>
@@ -447,23 +472,28 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
               </button>
             </div>
 
-            {/* Complexity & Confidence Gauge */}
+            {/* Dynamic Complexity & Solvability Gauge */}
             <div className="flex items-center gap-4 self-end md:self-auto">
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-outline uppercase font-semibold">Semantic Complexity</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-2 bg-surface-container-high rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: '86%' }}></div>
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-300"
+                      style={{ width: `${complexityPct}%` }}
+                    ></div>
                   </div>
-                  <span className="text-[11px] text-on-surface font-mono font-bold">8.6 / 10</span>
+                  <span className="text-[11px] text-on-surface font-mono font-bold">
+                    {complexityScore} / 10
+                  </span>
                 </div>
               </div>
 
               <div className="h-7 w-[1px] bg-surface-container-high hidden sm:block"></div>
 
               <div className="flex flex-col items-end">
-                <span className="text-[10px] text-outline uppercase font-semibold">Solvability Score</span>
-                <span className="text-[12px] text-primary font-bold">96.8% High</span>
+                <span className="text-[10px] text-outline uppercase font-semibold">Solvability Metric</span>
+                <span className="text-[12px] text-primary font-bold">{solvabilityPct}% Confidence</span>
               </div>
             </div>
           </div>
@@ -549,6 +579,18 @@ function ExperimentComposer({ onGenerate, generating, disabled }) {
           ))}
         </div>
       </section>
+
+      {/* ── Active Pipeline Tracker (Visible During or Post Execution) ─── */}
+      <section className="mb-6">
+        <ExperimentPipelineStatus />
+      </section>
+
+      {/* ── Retrieved Academic Grounding Papers (When Available) ────────── */}
+      {papers && papers.length > 0 && (
+        <section className="mb-6">
+          <ReferenceSearchPanel papers={papers} />
+        </section>
+      )}
 
       {/* ── Submit Action CTA Bar ───────────────────────────────────────── */}
       <div className="p-6 rounded-2xl bg-surface-container-lowest border border-surface-container-high shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">

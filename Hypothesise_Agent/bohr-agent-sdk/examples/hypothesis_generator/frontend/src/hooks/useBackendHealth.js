@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchHealth } from '../services/apiClient'
 
 /**
- * Polls /health (every 5s while disconnected, every 30s when healthy)
+ * Polls /health with latency tracking (every 5s while disconnected, every 15s when healthy)
  * and exposes `refresh` / `checkHealth` for manual refresh.
  */
 export function useBackendHealth() {
@@ -12,13 +12,18 @@ export function useBackendHealth() {
     backendHealthy: false,
     llmHealthy: false,
     memoryHealthy: false,
+    latencyMs: null,
   })
   const timerRef = useRef(null)
 
   const checkHealth = useCallback(async () => {
+    const t0 = performance.now()
     const result = await fetchHealth()
-    setStatus(result)
-    return result
+    const t1 = performance.now()
+    const latencyMs = Math.round(t1 - t0)
+    const enriched = { ...result, latencyMs }
+    setStatus(enriched)
+    return enriched
   }, [])
 
   useEffect(() => {
@@ -26,7 +31,7 @@ export function useBackendHealth() {
     const poll = async () => {
       const result = await checkHealth()
       if (!cancelled) {
-        const nextMs = result?.backendHealthy ? 30000 : 5000
+        const nextMs = result?.backendHealthy ? 15000 : 5000
         timerRef.current = setTimeout(poll, nextMs)
       }
     }

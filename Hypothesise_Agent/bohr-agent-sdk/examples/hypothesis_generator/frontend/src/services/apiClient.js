@@ -311,3 +311,10 @@ export async function streamVisualizationPipeline(topic, domain = null, userRefU
   return response
 }
 
+// Re-exports from modular services
+export { getModelStatus, pollModelStatus } from './modelService'
+export { updateParameters, generateSceneSpecification } from './simulationService'
+export { getAccuracyReport, getFeedbackScores, getAccuracyHistory, getDomainBreakdown } from './memoryService'
+export { getEvalReports, getEvalReport, refinePrompt } from './experimentService'
+
+

@@ -14,6 +14,8 @@ function InspectorPanel() {
   const complete = useExperimentStore((s) => s.complete)
   const streaming = useExperimentStore((s) => s.streaming)
   const simulation = useExperimentStore((s) => s.simulation)
+  const currentRunId = useExperimentStore((s) => s.currentRunId)
+  const runElapsedTime = useExperimentStore((s) => s.runElapsedTime)
 
   const getStatusLabel = () => {
     if (generating && streaming) return 'Streaming design...'
@@ -47,6 +49,18 @@ function InspectorPanel() {
             <Beaker size={14} />
             <span>Experiment</span>
           </div>
+          <div className="inspector-field">
+            <span className="inspector-field-label">Run ID</span>
+            <span className="inspector-field-value font-mono">
+              {currentRunId || <span className="text-muted">Awaiting run</span>}
+            </span>
+          </div>
+          {runElapsedTime && (
+            <div className="inspector-field">
+              <span className="inspector-field-label">Latency</span>
+              <span className="inspector-field-value font-mono">{runElapsedTime}s</span>
+            </div>
+          )}
           <div className="inspector-field">
             <span className="inspector-field-label">Topic</span>
             <span className="inspector-field-value">
